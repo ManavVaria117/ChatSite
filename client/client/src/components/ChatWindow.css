@@ -1,0 +1,91 @@
+/* Add these styles to your existing ChatWindow.css */
+
+.message {
+    /* Ensure message has relative positioning if you want to position reaction picker absolutely */
+    position: relative;
+    /* Add some padding/margin to make space for reactions */
+    margin-bottom: 15px; /* Increased margin */
+    padding-bottom: 25px; /* Add space for reactions below */
+}
+
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap; /* Allow reactions to wrap */
+    gap: 5px; /* Space between reaction pills */
+    margin-top: 5px; /* Space above reactions */
+    position: absolute; /* Position reactions below the message content */
+    bottom: 0; /* Align to the bottom of the message div */
+    left: 0; /* Align to the left */
+    padding: 0 10px; /* Add some horizontal padding */
+}
+
+.reaction-pill {
+    background-color: #e0e0e0;
+    border-radius: 15px;
+    padding: 3px 8px;
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    user-select: none; /* Prevent text selection */
+}
+
+.reaction-pill:hover {
+    background-color: #d5d5d5;
+}
+
+.reaction-pill.reacted-by-me {
+    background-color: #007bff; /* Highlight if current user reacted */
+    color: white;
+}
+
+.reaction-picker {
+    display: none; /* Hide by default */
+    position: absolute;
+    bottom: 100%; /* Position above the message */
+    left: 10px; /* Adjust positioning as needed */
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 10; /* Ensure it appears above messages */
+    gap: 5px;
+}
+
+/* Show reaction picker on message hover (optional, can use a button instead) */
+.message:hover .reaction-picker {
+    display: flex; /* Show on hover */
+}
+
+.reaction-option {
+    cursor: pointer;
+    padding: 2px;
+    font-size: 1.2em;
+    transition: transform 0.1s ease;
+}
+
+.reaction-option:hover {
+    transform: scale(1.2);
+}
+
+/* Add some basic styling for the message content and sender */
+.message .sender-username {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.message .message-content {
+    word-break: break-word; /* Prevent long words from overflowing */
+}
+
+.message .timestamp {
+    display: block; /* Display timestamp on a new line */
+    font-size: 0.7em;
+    color: #888;
+    margin-top: 2px;
+}
+
+/* Adjust message list padding to prevent reactions from being cut off */
+.message-list {
+    padding-bottom: 30px; /* Ensure space at the bottom */
+}
