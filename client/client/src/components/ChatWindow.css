@@ -33,10 +33,11 @@
     background-color: #d5d5d5;
 }
 
-.reaction-pill.reacted-by-me {
-    background-color: #007bff; /* Highlight if current user reacted */
+/* Removed: Highlight if current user reacted */
+/* .reaction-pill.reacted-by-me {
+    background-color: #007bff; // Highlight if current user reacted
     color: white;
-}
+} */
 
 .reaction-picker {
     display: none; /* Hide by default */
@@ -47,15 +48,72 @@
     border: 1px solid #ccc;
     border-radius: 5px;
     padding: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 10; /* Ensure it appears above messages */
-    gap: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    z-index: 1000; /* Ensure it's above other elements */
+    display: flex; /* Always display flex for the picker */
+    gap: 5px; /* Space between emojis */
 }
 
-/* Show reaction picker on message hover (optional, can use a button instead) */
-.message:hover .reaction-picker {
-    display: flex; /* Show on hover */
+.reaction-emoji {
+    cursor: pointer;
+    margin: 0 3px;
+    font-size: 1.2em;
+    transition: transform 0.1s ease;
 }
+
+.reaction-emoji:hover {
+    transform: scale(1.2);
+}
+
+/* --- Removed: New styles for the reaction users popup --- */
+/* .reaction-users-popup {
+    position: absolute; // Will be positioned absolutely relative to the viewport
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000; // Ensure it's above other elements
+    min-width: 150px;
+    max-height: 150px; // Limit height and add scrolling
+    overflow-y: auto;
+}
+
+.reaction-users-popup h4 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 1em;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.reaction-users-popup ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.reaction-users-popup li {
+    font-size: 0.9em;
+    color: #555;
+    margin-bottom: 4px;
+    white-space: nowrap; // Prevent usernames from wrapping
+    overflow: hidden;
+    text-overflow: ellipsis; // Add ellipsis if username is too long
+}
+
+.reaction-users-popup li:last-child {
+    margin-bottom: 0;
+} */
+/* --- End Removed new styles --- */
+
+
+/* Show reaction picker on message hover (optional, can use a button instead) */
+/* Modified to only show picker when state is set */
+/* .message:hover .reaction-picker {
+    display: flex; // Show on hover
+} */
 
 .reaction-option {
     cursor: pointer;

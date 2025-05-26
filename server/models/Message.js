@@ -22,15 +22,17 @@ const MessageSchema = new mongoose.Schema({
   reactions: [
     {
       emoji: {
-        type: String, // e.g., '👍', '❤️', '😂'
+        type: String, // e.g., '👍', '❤️', '😂', '😢', '🙏'
         required: true,
       },
+      // --- Keep the users array to store who reacted for counting ---
       users: [ // Array of user IDs who added this reaction
         {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'user', // Reference to the User model (lowercase 'user')
         }
       ]
+      // --- End Keep ---
     }
   ]
 });

@@ -1,35 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth'); // Assuming you have an auth middleware
-const Message = require('../models/Message'); // Assuming you have a Message model
-const User = require('../models/User'); // Import User model to populate sender info
+const auth = require('../middleware/auth'); // Assuming you want message sending to be authenticated
+const Message = require('../models/Message'); // Import the Message model
+const User = require('../models/User'); // Import User model to get sender info if needed
 
-// @route   GET api/chat/room/:roomId
-// @desc    Fetch message history for a specific room
+// @route   POST api/messages
+// @desc    Send a message
 // @access  Private
-router.get('/room/:roomId', auth, async (req, res) => {
-  try {
-    const roomId = req.params.roomId;
-
-    // Find messages for the given room, sort by timestamp, and populate sender details
-    const messages = await Message.find({ room: roomId })
-      .populate('sender', 'username profilePic') // Populate sender's username and profile pic
-      .sort('timestamp'); // Sort by timestamp ascending
-
-    res.json(messages);
-
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
-
-// @route   POST api/chat/message
-// @desc    Send a message to a room (via REST API)
-// @access  Private
-// Note: In a real-time chat, messages are typically sent via Socket.IO,
-// but this provides a REST alternative or fallback.
-router.post('/message', auth, async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const { room, content } = req.body;
 
   try {
@@ -62,5 +40,30 @@ router.post('/message', auth, async (req, res) => {
   }
 });
 
+// @route   GET api/messages/:roomId
+// @desc    Fetch message history for a room
+// @access  Private (or Public depending on requirements)
+router.get('/:roomId', auth, async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+
+    // Find messages for the given room, sort by timestamp, and populate sender details
+    const messages = await Message.find({ room: roomId })
+      .populate('sender', 'username profilePic')
+      // --- THIS POPULATE CALL IS ESSENTIAL FOR HISTORY ---
+      .populate({
+        path: 'reactions.users',
+        select: 'username'
+      })
+      // --- End of essential populate call ---
+      .sort('timestamp');
+
+    res.json(messages);
+
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
 
 module.exports = router;

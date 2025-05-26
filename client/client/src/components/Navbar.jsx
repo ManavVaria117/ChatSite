@@ -1,36 +1,67 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import './Navbar.css'; // We'll create this CSS file next
+import React, { useState, useEffect } from 'react'; // Import useState and useEffect
+import { Link, useLocation, useNavigate } from 'react-router-dom'; // Import useNavigate
+import axios from 'axios'; // Import axios
+import './Navbar.css';
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate(); // Initialize useNavigate
+  const [username, setUsername] = useState(''); // State to hold the username
   const isAuthenticated = !!localStorage.getItem('token');
 
-  // Don't show the navbar on the auth page
+  // Fetch username when the component mounts or isAuthenticated changes
+  useEffect(() => {
+    const fetchUsername = async () => {
+      const token = localStorage.getItem('token');
+      if (isAuthenticated && token) {
+        try {
+          const response = await axios.get('http://localhost:5000/api/users/me', {
+            headers: {
+              'x-auth-token': token,
+            },
+          });
+          setUsername(response.data.username);
+        } catch (error) {
+          console.error('Error fetching username:', error);
+          // Handle error, maybe clear token and redirect to login
+          localStorage.removeItem('token');
+          navigate('/auth');
+        }
+      } else {
+        setUsername(''); // Clear username if not authenticated
+      }
+    };
+
+    fetchUsername();
+  }, [isAuthenticated, navigate]); // Depend on isAuthenticated and navigate
+
+  // Don't show the navbar on the auth page or if not authenticated
   if (location.pathname === '/auth' || !isAuthenticated) {
     return null;
   }
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/auth'); // Use navigate for redirect
+  };
 
   return (
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/users" className="navbar-brand">ChatApp</Link> {/* Your app title/logo */}
         <ul className="nav-links">
-          {/* Add more navigation links here as needed */}
+          {/* Display username if available */}
+          {username && <li>Hello, {username}!</li>}
           <li>
             <Link to="/users" className="nav-link">Users</Link>
           </li>
-          {/* You might add a link to user details or a logout button here */}
           <li>
             <Link to="/details" className="nav-link">My Details</Link>
           </li>
           <li>
              {/* Example Logout Button - you'll need to implement the logout logic */}
              <button
-               onClick={() => {
-                 localStorage.removeItem('token');
-                 window.location.href = '/auth'; // Simple redirect to auth page
-               }}
+               onClick={handleLogout} // Use the handleLogout function
                className="nav-link logout-button"
              >
                Logout

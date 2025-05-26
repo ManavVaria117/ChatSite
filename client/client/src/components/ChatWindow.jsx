@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom'; // Import useNavigate
 import './ChatWindow.css'; // You'll need to create this CSS file
 
 // Replace with your backend URL
@@ -12,6 +12,7 @@ let socket;
 // Get roomId from URL parameters
 const ChatWindow = () => {
   const { roomId } = useParams();
+  const navigate = useNavigate(); // Initialize useNavigate
 
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -31,6 +32,20 @@ const ChatWindow = () => {
     // Add other pre-built rooms here if you have them
   };
 
+  // Define available emojis (you can expand this)
+  const availableEmojis = ['👍', '❤️', '😂', '😢', '🙏'];
+
+  // --- Removed: State for Reaction User List Popup ---
+  // const [showReactionUsersList, setShowReactionUsersList] = useState(false);
+  // const [reactionUsersList, setReactionUsersList] = useState([]);
+  // const [reactionListPosition, setReactionListPosition] = useState({ x: 0, y: 0 });
+  // const reactionListRef = useRef(null); // Ref for the popup element
+  // --- End Removed State ---
+
+  // --- New State for showing reaction picker ---
+  const [visibleReactionPickerId, setVisibleReactionPickerId] = useState(null);
+  // --- End New State ---
+
 
   useEffect(() => {
     console.log('ChatWindow mounted for room:', roomId);
@@ -40,6 +55,7 @@ const ChatWindow = () => {
       setError('Authentication required.');
       setLoadingHistory(false);
       // You might want to redirect to login here
+      navigate('/login'); // Redirect to login if no token
       return;
     }
 
@@ -54,6 +70,7 @@ const ChatWindow = () => {
             console.error('Error fetching current user:', err);
             setError('Failed to load user details.');
             // Handle error, maybe redirect to login
+            navigate('/login'); // Redirect on error
         }
     };
 
@@ -125,7 +142,13 @@ const ChatWindow = () => {
             'x-auth-token': token, // <-- Token used here
           },
         });
-        setMessages(response.data);
+        // Ensure messages from history also have a reactions array
+        // We no longer need to populate users here as we removed the functionality
+        const historyMessages = response.data.map(msg => ({
+            ...msg,
+            reactions: msg.reactions || []
+        }));
+        setMessages(historyMessages);
         setLoadingHistory(false);
       } catch (err) {
         console.error('Error fetching message history:', err);
@@ -148,24 +171,29 @@ const ChatWindow = () => {
       console.log('New message received:', message);
       // Only add message if it belongs to the current room
       if (message.room === roomId) {
-         setMessages((prevMessages) => [...prevMessages, message]);
+         // Ensure the message object has a reactions array, even if empty
+         const messageWithReactions = {
+             ...message,
+             reactions: message.reactions || [] // Add empty array if reactions is missing
+         };
+         setMessages((prevMessages) => [...prevMessages, messageWithReactions]);
       } else {
          console.log(`Received message for room ${message.room}, but current room is ${roomId}. Ignoring.`);
       }
     });
 
     // --- New: Event listener for message updates (including reactions) ---
-    // REMOVE the duplicate listener below
-    // socket.on('receiveMessage', (message) => {
-    //   console.log('New message received:', message);
-    //   // Only add message if it belongs to the current room
-    //   if (message.room === roomId) {
-    //      setMessages((prevMessages) => [...prevMessages, message]);
-    //   } else {
-    //      console.log(`Received message for room ${message.room}, but current room is ${roomId}. Ignoring.`);
-    //   }
-    // });
-
+    // This listener will handle updates to existing messages, like adding reactions
+    socket.on('updateMessage', (updatedMessage) => {
+        console.log('Message updated received:', updatedMessage); // <-- Add this log
+        console.log('Updated message reactions:', updatedMessage.reactions); // <-- Add this log
+        // Update the messages state with the updated message
+        setMessages(prevMessages =>
+            prevMessages.map(msg =>
+                msg._id === updatedMessage._id ? updatedMessage : msg
+            )
+        );
+    });
     // --- End New: Event listener for message updates ---
 
 
@@ -180,6 +208,8 @@ const ChatWindow = () => {
         console.error('Socket authentication error:', msg);
         setError('Chat authentication failed. Please log in again.');
         // You might want to clear token and redirect to login here
+        localStorage.removeItem('token'); // Clear invalid token
+        navigate('/login'); // Redirect to login
     });
 
     // Event listener for room errors from the server
@@ -189,76 +219,256 @@ const ChatWindow = () => {
     });
 
     // Event listener for message errors from the server
-     socket.on('messageError', (msg) => {
+    socket.on('messageError', (msg) => {
         console.error('Socket message error:', msg);
         setError(`Message error: ${msg}`);
     });
 
-     // --- New: Event listener for reaction errors from the server ---
-     // REMOVE the duplicate listener below
-    //  socket.on('receiveMessage', (message) => {
-    //   console.log('New message received:', message);
-    //   // Only add message if it belongs to the current room
-    //   if (message.room === roomId) {
-    //      setMessages((prevMessages) => [...prevMessages, message]);
-    //   } else {
-    //      console.log(`Received message for room ${message.room}, but current room is ${roomId}. Ignoring.`);
-    //   }
-    // });
+    // Join the room after successful connection and authentication
+    socket.on('connect', () => {
+        console.log('Socket connected, joining room:', roomId);
+        socket.emit('joinRoom', roomId);
+    });
 
-    // --- End New: Event listener for reaction errors ---
-
-
-    // Join the specific room
-    socket.emit('joinRoom', roomId);
 
     // Clean up on component unmount
     return () => {
-      socket.disconnect();
-      console.log('Socket disconnected');
+      console.log('ChatWindow unmounted, disconnecting socket.');
+      if (socket) { // Check if socket is initialized
+        socket.disconnect();
+        // Remove listeners to prevent memory leaks
+        socket.off('receiveMessage');
+        socket.off('updateMessage');
+        socket.off('connect_error');
+        socket.off('authError');
+        socket.off('roomError');
+        socket.off('messageError');
+        socket.off('connect');
+      }
     };
-  }, [roomId, currentUserId]); // Add currentUserId to dependencies
+  }, [roomId, navigate, currentUserId]); // Added dependencies
 
-  // Scroll to the latest message whenever messages update
+  // Scroll to the bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages]); // Scroll when messages state changes
 
-  const sendMessage = (e) => {
+  // --- Modified useEffect for handling clicks outside the popup and scrolling ---
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+        // Check if a picker is currently visible
+        if (visibleReactionPickerId !== null) {
+            // Check if the click target is outside any element with the class 'message'
+            // This hides the picker if you click anywhere outside a message div.
+            const clickedInsideMessage = event.target.closest('.message');
+            if (!clickedInsideMessage) {
+                setVisibleReactionPickerId(null);
+            }
+        }
+    };
+
+    const handleScroll = () => {
+        // Hide the picker on scroll
+        if (visibleReactionPickerId !== null) {
+            setVisibleReactionPickerId(null);
+        }
+    };
+
+    // Add event listeners to the document body
+    // Use capture phase for mousedown to ensure it runs before click handlers on elements
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('scroll', handleScroll, true); // Use capture phase for scroll
+
+    // Clean up the event listeners
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside, true);
+        document.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [visibleReactionPickerId]); // Removed showReactionUsersList from dependencies
+  // --- End Modified useEffect ---
+
+
+  const handleSendMessage = (e) => {
     e.preventDefault();
     if (newMessage.trim() && socket) {
-      console.log(`Sending message to room ${roomId}: ${newMessage}`);
+      console.log('Sending message:', newMessage, 'to room:', roomId);
       socket.emit('sendMessage', { roomId, content: newMessage });
       setNewMessage('');
     }
   };
+
+  // --- New: Function to handle toggling a reaction ---
+  const handleToggleReaction = (messageId, emoji) => {
+    if (!socket || !currentUserId) {
+        console.error('Socket not connected or user ID not available.');
+        return;
+    }
+    console.log(`Toggling reaction ${emoji} for message ${messageId} by user ${currentUserId}`);
+    // Emit the toggleReaction event to the server
+    // --- Ensure userId is included here ---
+    socket.emit('toggleReaction', { messageId, emoji, userId: currentUserId });
+    // --- End Ensure ---
+    // Close the picker after selecting a reaction
+    setVisibleReactionPickerId(null);
+  };
+  // --- End New: Function to handle toggling a reaction ---
+
+
+  // --- Removed: Handle reaction click (replaced by handleToggleReaction) ---
+  // const handleReactionClick = (messageId, emoji) => {
+  //   if (socket) {
+  //       console.log(`Toggling reaction ${emoji} on message ${messageId}`);
+  //       // We no longer send userId here as the server doesn't store who reacted
+  //       socket.emit('toggleReaction', { messageId, emoji });
+  //   }
+  // };
+  // --- End Removed: Handle reaction click ---
+
+
+  // --- Removed: Handle showing reaction users list ---
+  // const handleShowReactionUsers = (users, event) => {
+  //   if (users && users.length > 0) {
+  //       // The users array here should already be populated user objects from the server
+  //       setReactionUsersList(users);
+  //       // Position the popup near the click event
+  //       setReactionListPosition({ x: event.clientX, y: event.clientY });
+  //       setShowReactionUsersList(true);
+  //   } else {
+  //       // If no users, hide the popup
+  //       setShowReactionUsersList(false);
+  //       setReactionUsersList([]);
+  //   }
+  // };
+  // --- End Removed: Handle showing reaction users list ---
+
+  // --- Removed: Handle hiding reaction users list ---
+  // const handleHideReactionUsers = () => {
+  //   // Use a timeout to allow click event on the popup itself
+  //   setTimeout(() => {
+  //       // Check if the popup element exists and if the active element is outside it
+  //       if (reactionListRef.current && !reactionListRef.current.contains(document.activeElement)) {
+  //            setShowReactionUsersList(false);
+  //            setReactionUsersList([]);
+  //       }
+  //   }, 100); // Adjust timeout as needed
+  // };
+  // --- End Removed: Handle hiding reaction users list ---
+
+
+  // Function to format reactions for display (emoji + count)
+  // This function remains the same as it correctly counts reactions by emoji
+  const formatReactions = (reactions) => {
+    if (!reactions || reactions.length === 0) return [];
+
+    // Group reactions by emoji and count them
+    const reactionCounts = reactions.reduce((acc, reaction) => {
+        // Assuming reaction object now only has { emoji: '...' }
+        const emoji = reaction.emoji;
+        if (!acc[emoji]) {
+            acc[emoji] = 0;
+        }
+        acc[emoji]++;
+        return acc;
+    }, {});
+
+    // Convert the counts back into an array of objects for rendering
+    return Object.keys(reactionCounts).map(emoji => ({
+        emoji: emoji,
+        count: reactionCounts[emoji],
+        // We no longer need the 'reactedByMe' flag here if we don't show who reacted
+    }));
+  };
+
 
   if (loadingHistory) {
     return <div className="chat-window-container">Loading messages...</div>;
   }
 
   if (error) {
-    return <div className="chat-window-container">Error: {error}</div>;
+    return <div className="chat-window-container error">Error: {error}</div>;
   }
 
   return (
     <div className="chat-window-container">
-      {/* Display the determined chat name */}
-      <h2>Chating room: {otherUsername} </h2>
-
+      <div className="chat-header">
+        <h2>{otherUsername}</h2> {/* Display the chat name */}
+      </div>
       <div className="message-list">
-        {messages.map((message, index) => (
-          <div key={message._id || index} className="message">
-            <span className="sender-username">{message.sender?.username || 'Unknown User'}:</span>
-            <span className="message-content">{message.content}</span>
-            <span className="timestamp">{new Date(message.timestamp).toLocaleTimeString()}</span>
-            {/* Add reaction display and picker here later */}
+        {messages.map((message) => (
+          <div
+            key={message._id}
+            className={`message ${message.sender._id === currentUserId ? 'sent' : 'received'}`}
+            // --- Add onClick handler to toggle picker visibility ---
+            onClick={(e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                // If the clicked message's picker is already visible, hide it. Otherwise, show it.
+                setVisibleReactionPickerId(prevId => prevId === message._id ? null : message._id);
+            }}
+            // --- End Add onClick handler ---
+          >
+            <div className="message-sender">
+              {/* Display sender's profile picture */}
+              {/* {message.sender.profilePic && (
+                <img
+                  src={message.sender.profilePic}
+                  alt={`${message.sender.username}'s profile`}
+                  className="message-profile-pic"
+                />
+              )} */}
+              {/* Display sender's username */}
+              <span className="sender-username">{message.sender.username}</span>
+            </div>
+            <div className="message-content">{message.content}</div>
+            <div className="message-footer">
+              <span className="timestamp">{new Date(message.timestamp).toLocaleTimeString()}</span>
+              {/* --- Modified: Display Reactions --- */}
+              {/* Check if reactions array exists and has items */}
+              {/* Use formatReactions to get the count per emoji */}
+              {formatReactions(message.reactions).map(reaction => (
+                <span
+                  key={reaction.emoji}
+                  className="reaction-pill" // Changed class to reaction-pill
+                  // Removed onClick handler for showing user list
+                  // onClick={(e) => handleShowReactionUsers(reaction.users, e)}
+                  // --- Modified: Add click handler to toggle reaction for the current user ---
+                  onClick={(e) => {
+                      e.stopPropagation(); // Prevent click from closing picker/message click handler
+                      handleToggleReaction(message._id, reaction.emoji); // Call the new function
+                  }}
+                  // --- End Modified ---
+                >
+                  {/* Display emoji and count */}
+                  {reaction.emoji} {reaction.count}
+                </span>
+              ))}
+              {/* --- End Modified: Display Reactions --- */}
+            </div>
+             {/* --- New: Reaction Picker --- */}
+             {/* Show reaction picker only if this message's ID matches the visible picker ID */}
+             {visibleReactionPickerId === message._id && (
+                 <div className="reaction-picker" onClick={(e) => e.stopPropagation()}> {/* Stop propagation so clicking picker doesn't close it */}
+                    {availableEmojis.map(emoji => (
+                        <span
+                            key={emoji}
+                            className="reaction-emoji"
+                            // --- Modified: Add click handler to toggle reaction from picker ---
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent click from closing picker
+                                handleToggleReaction(message._id, emoji); // Call the new function
+                            }}
+                            // --- End Modified ---
+                        >
+                            {emoji}
+                        </span>
+                    ))}
+                 </div>
+             )}
+             {/* --- End New: Reaction Picker --- */}
           </div>
         ))}
-        <div ref={messagesEndRef} /> {/* Empty div to scroll to */}
+        <div ref={messagesEndRef} /> {/* Element to scroll into view */}
       </div>
-
-      <form onSubmit={sendMessage} className="message-input-form">
+      <form onSubmit={handleSendMessage} className="message-input-form">
         <input
           type="text"
           value={newMessage}
@@ -268,6 +478,25 @@ const ChatWindow = () => {
         />
         <button type="submit" className="send-button">Send</button>
       </form>
+
+      {/* --- Removed: Reaction Users List Popup --- */}
+      {/* {showReactionUsersList && reactionUsersList.length > 0 && (
+        <div
+          ref={reactionListRef}
+          className="reaction-users-popup"
+          style={{ top: reactionListPosition.y, left: reactionListPosition.x }}
+          onBlur={handleHideReactionUsers} // Hide when focus is lost
+          tabIndex="-1" // Make it focusable
+        >
+          <h4>Reacted by:</h4>
+          <ul>
+            {reactionUsersList.map(user => (
+              <li key={user._id}>{user.username}</li> // Assuming user object has _id and username
+            ))}
+          </ul>
+        </div>
+      )} */}
+      {/* --- End Removed Reaction Users List Popup --- */}
     </div>
   );
 };

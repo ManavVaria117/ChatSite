@@ -9,7 +9,7 @@ const path = require('path');
 const Message = require('./models/Message'); // <-- Ensure Message model is imported
 
 const messageRoutes = require('./routes/messages'); // Import the new messages route
-const chatRoutes = require('./routes/chat'); // Import the new chat route - REMOVED
+// const chatRoutes = require('./routes/chat'); // Import the new chat route - REMOVED
 const http = require('http');
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken'); // Import jwt
@@ -126,7 +126,7 @@ io.on('connection', (socket) => {
             sender: {
                 _id: senderUser._id,
                 username: senderUser.username,
-                profilePic: senderUser.profilePic,
+                // profilePic: senderUser.profilePic,
             },
             room: newMessage.room,
             content: newMessage.content,
@@ -143,6 +143,85 @@ io.on('connection', (socket) => {
         // Log the full error stack for debugging
         console.error(err.stack);
         socket.emit('messageError', 'Failed to send message.');
+    }
+  });
+
+  // --- Handle toggleReaction event ---
+  // Ensure userId is destructured from the event data
+  socket.on('toggleReaction', async ({ messageId, emoji, userId }) => {
+    try {
+        // userId is now received directly from the client
+        // const userId = socket.userId; // No longer need to get from socket.userId if client sends it
+
+        if (!userId) {
+            console.error('User ID not provided for toggling reaction');
+            socket.emit('reactionError', 'User ID required to add reactions.');
+            return;
+        }
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            console.error(`Message not found with ID: ${messageId}`);
+            socket.emit('reactionError', 'Message not found.');
+            return;
+        }
+
+        // Find if this emoji reaction already exists on the message
+        let reaction = message.reactions.find(r => r.emoji === emoji);
+
+        if (reaction) {
+            // Reaction exists, check if user has already reacted with this emoji
+            // Convert userId to string for comparison if needed, depending on how it's stored
+            const userIdStr = userId.toString();
+            const userIndex = reaction.users.findIndex(id => id.toString() === userIdStr);
+
+            if (userIndex > -1) {
+                // User has reacted, remove their reaction
+                reaction.users.splice(userIndex, 1);
+                console.log(`Removed reaction ${emoji} from message ${messageId} for user ${userId}`);
+
+                // If no users left for this reaction, remove the reaction object
+                if (reaction.users.length === 0) {
+                    message.reactions = message.reactions.filter(r => r.emoji !== emoji);
+                    console.log(`Removed empty reaction object ${emoji} from message ${messageId}`);
+                }
+
+            } else {
+                // User has not reacted, add their reaction
+                reaction.users.push(userId);
+                console.log(`Added reaction ${emoji} to message ${messageId} for user ${userId}`);
+            }
+        } else {
+            // Reaction does not exist, create a new one
+            message.reactions.push({ emoji: emoji, users: [userId] });
+            console.log(`Created new reaction ${emoji} on message ${messageId} for user ${userId}`);
+        }
+
+        // Save the updated message
+        await message.save();
+        console.log(`Message ${messageId} saved after reaction toggle.`);
+
+        // --- Fetch the message again and populate sender and reactions.users before emitting ---
+        // This is crucial to send the full, updated message object to the client
+        const populatedMessage = await Message.findById(messageId)
+            .populate('sender', 'username profilePic') // Populate sender details
+            .populate({ // Populate users within reactions
+              path: 'reactions.users',
+              select: 'username' // Select username if needed on client, though we removed displaying the list
+            });
+        // --- End Fetch and Populate ---
+
+        // Emit the populated message to the room
+        // The client's 'updateMessage' listener will receive this
+        io.to(message.room).emit('updateMessage', populatedMessage);
+        console.log(`Emitted updateMessage for message ${messageId} to room ${message.room}`);
+
+    } catch (error) {
+        console.error('Error toggling reaction:', error);
+        // Log the full error stack for debugging
+        console.error(error.stack);
+        socket.emit('reactionError', 'Failed to toggle reaction.');
     }
   });
 
