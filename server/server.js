@@ -150,76 +150,79 @@ io.on('connection', (socket) => {
   // Ensure userId is destructured from the event data
   socket.on('toggleReaction', async ({ messageId, emoji, userId }) => {
     try {
-        // userId is now received directly from the client
-        // const userId = socket.userId; // No longer need to get from socket.userId if client sends it
+      if (!userId) {
+        console.error('User ID not provided for toggling reaction');
+        socket.emit('reactionError', 'User ID required to add reactions.');
+        return;
+      }
 
-        if (!userId) {
-            console.error('User ID not provided for toggling reaction');
-            socket.emit('reactionError', 'User ID required to add reactions.');
-            return;
-        }
+      console.log(`Toggling reaction - Message: ${messageId}, Emoji: ${emoji}, User: ${userId}`);
 
-        const message = await Message.findById(messageId);
+      // Find the message
+      const message = await Message.findById(messageId);
+      if (!message) {
+        console.error(`Message not found with ID: ${messageId}`);
+        socket.emit('reactionError', 'Message not found.');
+        return;
+      }
 
-        if (!message) {
-            console.error(`Message not found with ID: ${messageId}`);
-            socket.emit('reactionError', 'Message not found.');
-            return;
-        }
+      // Initialize reactions array if it doesn't exist
+      if (!message.reactions) {
+        message.reactions = [];
+      }
 
-        // Find if this emoji reaction already exists on the message
-        let reaction = message.reactions.find(r => r.emoji === emoji);
+      // Find the reaction for this emoji
+      let reaction = message.reactions.find(r => r.emoji === emoji);
+      let reactionIndex = message.reactions.findIndex(r => r.emoji === emoji);
 
-        if (reaction) {
-            // Reaction exists, check if user has already reacted with this emoji
-            // Convert userId to string for comparison if needed, depending on how it's stored
-            const userIdStr = userId.toString();
-            const userIndex = reaction.users.findIndex(id => id.toString() === userIdStr);
+      // Check if user has already reacted with this emoji
+      let userReacted = false;
+      if (reaction) {
+        // Check if user is in the reaction's users array
+        userReacted = reaction.users.some(u => 
+          u && (u.toString() === userId.toString() || (u._id && u._id.toString() === userId.toString()))
+        );
 
-            if (userIndex > -1) {
-                // User has reacted, remove their reaction
-                reaction.users.splice(userIndex, 1);
-                console.log(`Removed reaction ${emoji} from message ${messageId} for user ${userId}`);
-
-                // If no users left for this reaction, remove the reaction object
-                if (reaction.users.length === 0) {
-                    message.reactions = message.reactions.filter(r => r.emoji !== emoji);
-                    console.log(`Removed empty reaction object ${emoji} from message ${messageId}`);
-                }
-
-            } else {
-                // User has not reacted, add their reaction
-                reaction.users.push(userId);
-                console.log(`Added reaction ${emoji} to message ${messageId} for user ${userId}`);
-            }
+        if (userReacted) {
+          // Remove user from reaction
+          reaction.users = reaction.users.filter(u => 
+            u && (u.toString() !== userId.toString() && (!u._id || u._id.toString() !== userId.toString()))
+          );
+          
+          // Remove reaction if no users left
+          if (reaction.users.length === 0) {
+            message.reactions.splice(reactionIndex, 1);
+          }
         } else {
-            // Reaction does not exist, create a new one
-            message.reactions.push({ emoji: emoji, users: [userId] });
-            console.log(`Created new reaction ${emoji} on message ${messageId} for user ${userId}`);
+          // Add user to reaction
+          reaction.users.push(userId);
         }
+      } else {
+        // Create new reaction
+        message.reactions.push({
+          emoji,
+          users: [userId]
+        });
+      }
 
-        // Save the updated message
-        await message.save();
-        console.log(`Message ${messageId} saved after reaction toggle.`);
+      // Save the updated message
+      await message.save();
+      console.log('Updated message:', message);
 
-        // --- Fetch the message again and populate sender and reactions.users before emitting ---
-        // This is crucial to send the full, updated message object to the client
-        const populatedMessage = await Message.findById(messageId)
-            .populate('sender', 'username profilePic') // Populate sender details
-            .populate({ // Populate users within reactions
-              path: 'reactions.users',
-              select: 'username' // Select username if needed on client, though we removed displaying the list
-            });
-        // --- End Fetch and Populate ---
+      // Populate the message with user details
+      const populatedMessage = await Message.findById(message._id)
+        .populate('sender', 'username profilePic')
+        .populate({
+          path: 'reactions.users',
+          select: 'username'
+        });
 
-        // Emit the populated message to the room
-        // The client's 'updateMessage' listener will receive this
-        io.to(message.room).emit('updateMessage', populatedMessage);
-        console.log(`Emitted updateMessage for message ${messageId} to room ${message.room}`);
+      // Emit the updated message to the room
+      io.to(message.room).emit('updateMessage', populatedMessage);
+      console.log(`Emitted updateMessage for message ${messageId} to room ${message.room}`);
 
     } catch (error) {
         console.error('Error toggling reaction:', error);
-        // Log the full error stack for debugging
         console.error(error.stack);
         socket.emit('reactionError', 'Failed to toggle reaction.');
     }
