@@ -68,13 +68,76 @@ io.on('connection', (socket) => {
   // Handle joining a room
   socket.on('joinRoom', (roomId) => {
     if (!roomId) {
-        console.warn(`Socket ${socket.id} (User ${socket.userId}) attempted to join a null or empty room ID.`);
-        // Optionally emit an error back to the client
-        socket.emit('roomError', 'Invalid room ID provided.');
-        return;
+      console.warn(`Socket ${socket.id} (User ${socket.userId}) attempted to join a null or empty room ID.`);
+      // Optionally emit an error back to the client
+      socket.emit('roomError', 'Invalid room ID provided.');
+      return;
     }
+    
+    // Leave any existing rooms
+    const rooms = Array.from(socket.rooms || []);
+    rooms.forEach(room => {
+      if (room !== socket.id) { // Don't leave the default room (socket's own room)
+        socket.leave(room);
+      }
+    });
+    
+    // Join the new room
     socket.join(roomId);
     console.log(`Socket ${socket.id} (User ${socket.userId}) joined room ${roomId}`);
+  });
+  
+  // Handle typing indicators
+  socket.on('typing', async (roomId) => {
+    console.log(`User ${socket.userId} is typing in room ${roomId}`);
+    if (!roomId) {
+      console.warn('Received typing event without roomId');
+      return;
+    }
+    
+    try {
+      // Get the user's username
+      const user = await User.findById(socket.userId).select('username');
+      if (!user) {
+        console.warn(`User ${socket.userId} not found`);
+        return;
+      }
+      
+      // Broadcast to everyone in the room except the sender
+      socket.to(roomId).emit('typing', {
+        roomId,
+        userId: socket.userId,
+        username: user.username
+      });
+    } catch (err) {
+      console.error('Error handling typing event:', err);
+    }
+  });
+
+  socket.on('stop typing', async (roomId) => {
+    console.log(`User ${socket.userId} stopped typing in room ${roomId}`);
+    if (!roomId) {
+      console.warn('Received stop typing event without roomId');
+      return;
+    }
+    
+    try {
+      // Get the user's username
+      const user = await User.findById(socket.userId).select('username');
+      if (!user) {
+        console.warn(`User ${socket.userId} not found`);
+        return;
+      }
+      
+      // Broadcast to everyone in the room except the sender
+      socket.to(roomId).emit('stop typing', {
+        roomId,
+        userId: socket.userId,
+        username: user.username
+      });
+    } catch (err) {
+      console.error('Error handling stop typing event:', err);
+    }
   });
 
   // Handle receiving a message from the client via socket

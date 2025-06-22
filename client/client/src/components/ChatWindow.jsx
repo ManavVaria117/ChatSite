@@ -21,7 +21,11 @@ const ChatWindow = () => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [otherUsername, setOtherUsername] = useState('Loading...');
   const [visibleReactionPickerId, setVisibleReactionPickerId] = useState(null);
+  const [typingUsers, setTypingUsers] = useState({});
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const isTypingRef = useRef(false);
+  const typingTimeoutsRef = useRef({});
 
   // Predefined rooms and emojis
   const prebuiltRooms = {
@@ -122,9 +126,22 @@ const ChatWindow = () => {
     const token = localStorage.getItem('token');
     if (!token || !roomId) return;
 
+    // Disconnect any existing socket connection
+    if (socket) {
+      socket.disconnect();
+    }
+
+    // Create new socket connection
     socket = io(ENDPOINT, {
-      query: { token, roomId }
+      query: { token, roomId },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
+    
+    // Join the room
+    socket.emit('joinRoom', roomId);
+    console.log('Socket connected, joining room:', roomId);
 
     socket.on('receiveMessage', (message) => {
       console.log('Received new message:', message);
@@ -182,9 +199,60 @@ const ChatWindow = () => {
       localStorage.removeItem('token');
       navigate('/login');
     });
+    
+    // Typing indicators
+    socket.on('typing', ({ roomId: typingRoomId, userId, username }) => {
+      console.log(`User ${username} is typing in room ${typingRoomId}`);
+      if (typingRoomId === roomId && userId !== currentUserId) {
+        setTypingUsers(prev => ({
+          ...prev,
+          [userId]: username
+        }));
 
+        // Clear any existing timeout for this user
+        if (typingTimeoutsRef.current[userId]) {
+          clearTimeout(typingTimeoutsRef.current[userId]);
+        }
+
+        // Set a timeout to automatically remove the typing indicator after 3 seconds
+        typingTimeoutsRef.current[userId] = setTimeout(() => {
+          setTypingUsers(prev => {
+            const newTypingUsers = { ...prev };
+            delete newTypingUsers[userId];
+            return newTypingUsers;
+          });
+          delete typingTimeoutsRef.current[userId];
+        }, 3000);
+      }
+    });
+
+    socket.on('stop typing', ({ roomId: typingRoomId, userId }) => {
+      console.log(`User ${userId} stopped typing in room ${typingRoomId}`);
+      if (typingRoomId === roomId && userId !== currentUserId) {
+        setTypingUsers(prev => {
+          const newTypingUsers = { ...prev };
+          delete newTypingUsers[userId];
+          return newTypingUsers;
+        });
+        
+        // Clear the timeout since we're explicitly stopping typing
+        if (typingTimeoutsRef.current[userId]) {
+          clearTimeout(typingTimeoutsRef.current[userId]);
+          delete typingTimeoutsRef.current[userId];
+        }
+      }
+    });
+    
+    // Cleanup function
     return () => {
       if (socket) {
+        console.log('Cleaning up socket connection');
+        socket.off('typing');
+        socket.off('stop typing');
+        socket.off('receiveMessage');
+        socket.off('updateMessage');
+        socket.off('connect_error');
+        socket.off('authError');
         socket.disconnect();
       }
     };
@@ -220,9 +288,53 @@ const ChatWindow = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [visibleReactionPickerId]);
 
+  const handleInputChange = (e) => {
+    const message = e.target.value;
+    setNewMessage(message);
+    
+    // Only proceed if we have a valid socket and roomId
+    if (!socket || !roomId) return;
+    
+    // Emit typing event when user starts typing
+    if (!isTypingRef.current && message.trim() !== '') {
+      isTypingRef.current = true;
+      console.log('Emitting typing event for room:', roomId);
+      socket.emit('typing', roomId);
+    } else if (message.trim() === '') {
+      // If message is empty, stop typing
+      isTypingRef.current = false;
+      socket.emit('stop typing', roomId);
+    }
+    
+    // Clear any existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set a timeout to emit stop typing when user pauses
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTypingRef.current) {
+        console.log('User stopped typing, emitting stop typing event');
+        isTypingRef.current = false;
+        socket.emit('stop typing', roomId);
+      }
+    }, 2000); // 2 seconds delay before stopping typing indicator
+  };
+
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (newMessage.trim() && socket) {
+      // Stop typing indicator when message is sent
+      if (isTypingRef.current) {
+        socket.emit('stop typing', roomId);
+        isTypingRef.current = false;
+      }
+      
+      // Clear any existing typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
       const tempId = Date.now().toString(); // Temporary ID for optimistic update
       
       // Get the current user's info from localStorage
@@ -426,11 +538,30 @@ const ChatWindow = () => {
         ))}
         <div ref={messagesEndRef} />
       </div>
+      {Object.keys(typingUsers).length > 0 && (
+        <div className="typing-indicator">
+          <span>
+            {Object.entries(typingUsers).map(([userId, username], index, array) => (
+              <span key={userId}>
+                {username}
+                {index < array.length - 2 ? ', ' : index === array.length - 2 && array.length > 1 ? ' and ' : ''}
+              </span>
+            ))}
+            {Object.keys(typingUsers).length === 1 ? ' is ' : ' are '}
+            typing
+          </span>
+          <span className="typing-dots">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </div>
+      )}
       <form onSubmit={handleSendMessage} className="message-input-form">
         <input
           type="text"
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
+          onChange={handleInputChange}
           placeholder="Enter message..."
           className="message-input"
         />
