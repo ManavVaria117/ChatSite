@@ -5,6 +5,7 @@ import UserDetailsForm from './components/UserDetailsForm';
 import UserList from './components/UserList';
 import ChatWindow from './components/ChatWindow';
 import Suggestions from './pages/Suggestions';
+import RoomStatus from './components/RoomStatus';
 import Navbar from './components/Navbar'; // Import the Navbar component
 
 function App() {
@@ -38,6 +39,11 @@ function App() {
           <Route
             path="/suggestions"
             element={isAuthenticated ? <Suggestions /> : <Navigate to="/auth" />}
+          />
+
+          <Route
+            path="/room-status"
+            element={isAuthenticated ? <RoomStatus /> : <Navigate to="/auth" />}
           />
 
           {/* Redirect root path */}

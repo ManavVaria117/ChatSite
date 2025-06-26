@@ -1,0 +1,205 @@
+.room-status {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.status-header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.week-info {
+  margin-top: 10px;
+  font-size: 1.1em;
+  color: #555;
+}
+
+.date-range {
+  font-size: 0.9em;
+  color: #777;
+  margin-top: 5px;
+}
+
+.suggestions-section,
+.rooms-section {
+  margin-bottom: 40px;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+h3 {
+  color: #2c3e50;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
+
+.suggestions-list,
+.rooms-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.suggestion-card,
+.room-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 15px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.suggestion-card:hover,
+.room-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-name {
+  font-weight: 600;
+  font-size: 1.1em;
+  margin-bottom: 8px;
+  color: #2c3e50;
+}
+
+.suggestion-description {
+  color: #555;
+  font-size: 0.9em;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.vote-count {
+  display: flex;
+  gap: 15px;
+  margin: 10px 0;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.upvotes { color: #2ecc71; }
+.downvotes { color: #e74c3c; }
+.score { font-weight: 600; }
+
+.vote-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.vote-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upvote {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.upvote:hover {
+  background-color: #c8e6c9;
+}
+
+.downvote {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.downvote:hover {
+  background-color: #ffcdd2;
+}
+
+.room-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.room-name {
+  font-weight: 600;
+  font-size: 1.1em;
+  margin-bottom: 10px;
+  color: #2c3e50;
+}
+
+.room-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.temporary {
+  color: #e67e22;
+  font-weight: 500;
+}
+
+.loading,
+.error {
+  text-align: center;
+  padding: 40px;
+  font-size: 1.1em;
+}
+
+.error {
+  color: #e74c3c;
+}
+
+@media (max-width: 768px) {
+  .room-status {
+    padding: 1rem;
+  }
+  
+  .suggestions-list,
+  .rooms-list {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .suggestions-section,
+  .rooms-section {
+    padding: 1.25rem;
+  }
+  
+  .status-header {
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .status-header h2 {
+    font-size: 1.5rem;
+  }
+  
+  .week-info {
+    margin-top: 0.75rem;
+  }
+  
+  .next-rotation {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+  }
+  
+  .vote-buttons {
+    flex-direction: column;
+  }
+  
+  .vote-btn {
+    padding: 0.7rem;
+  }
+}

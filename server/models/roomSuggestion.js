@@ -86,17 +86,38 @@ const RoomSuggestionSchema = new mongoose.Schema({
   timestamps: true // This will automatically add createdAt and updatedAt fields
 });
 
+// Function to get the current week number
+function getCurrentWeek() {
+  const date = new Date();
+  const oneJan = new Date(date.getFullYear(), 0, 1);
+  return Math.ceil((((date - oneJan) / 86400000) + oneJan.getDay() + 1) / 7);
+}
+
 // Indexes for better query performance
 RoomSuggestionSchema.index({ status: 1, voteScore: -1 });
 RoomSuggestionSchema.index({ createdBy: 1 });
 RoomSuggestionSchema.index({ name: 'text', description: 'text' });
 
-// Method to update vote score
-RoomSuggestionSchema.methods.updateVoteScore = function() {
-  this.voteScore = this.votes.reduce((score, vote) => {
-    return vote.voteType === 'up' ? score + 1 : score - 1;
-  }, 0);
-  return this.save();
+// Method to update vote score for current week
+RoomSuggestionSchema.methods.getCurrentWeekVotes = function() {
+  const currentWeek = getCurrentWeek();
+  const weeklyVotes = this.votes.filter(vote => vote.week === currentWeek);
+  const upVotes = weeklyVotes.filter(vote => vote.voteType === 'up').length;
+  const downVotes = weeklyVotes.filter(vote => vote.voteType === 'down').length;
+  return upVotes - downVotes;
+};
+
+// Method to get votes for a specific week
+RoomSuggestionSchema.methods.getVotesForWeek = function(week) {
+  const weeklyVotes = this.votes.filter(vote => vote.week === week);
+  const upVotes = weeklyVotes.filter(vote => vote.voteType === 'up').length;
+  const downVotes = weeklyVotes.filter(vote => vote.voteType === 'down').length;
+  return {
+    week,
+    upVotes,
+    downVotes,
+    score: upVotes - downVotes
+  };
 };
 
 // Check if the model already exists before defining it

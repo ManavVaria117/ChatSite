@@ -37,5 +37,18 @@ const MessageSchema = new mongoose.Schema({
   ]
 });
 
+// Update room's last activity when a new message is saved
+MessageSchema.post('save', async function(doc) {
+  try {
+    const Room = mongoose.model('Room');
+    await Room.findByIdAndUpdate(doc.room, { 
+      lastActivity: new Date(),
+      $inc: { messageCount: 1 }
+    });
+  } catch (error) {
+    console.error('Error updating room activity:', error);
+  }
+});
+
 // Check if the model already exists before defining it
 module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);

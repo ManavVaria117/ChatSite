@@ -10,11 +10,16 @@ const Message = require('./models/Message'); // <-- Ensure Message model is impo
 
 const messageRoutes = require('./routes/messages'); // Import the messages route
 const suggestionRoutes = require('./routes/suggestions'); // Import the suggestions route
+const roomStatusRoutes = require('./routes/roomStatus'); // Import room status route
 // const chatRoutes = require('./routes/chat'); // Import the new chat route - REMOVED
 const http = require('http');
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken'); // Import jwt
 require('dotenv').config(); // Ensure dotenv is loaded
+
+// Initialize room rotation service
+const roomRotationService = require('./services/roomRotationService');
+console.log('Room rotation service initialized');
 
 
 
@@ -44,6 +49,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/suggestions', suggestionRoutes); // Mount the suggestions routes
+app.use('/api/room-status', roomStatusRoutes); // Mount the room status routes
 // app.use('/api/chat/:roomId', chatRoutes); // Mount the new chat routes - REMOVED
 
 // Add Socket.IO authentication middleware
