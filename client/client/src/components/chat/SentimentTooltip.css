@@ -1,0 +1,74 @@
+.sentiment-tooltip {
+  position: relative;
+  display: inline-block;
+  margin-left: 0.5rem;
+  cursor: help;
+}
+
+.sentiment-tooltip .info-icon {
+  color: #666;
+  font-size: 0.9rem;
+  transition: color 0.2s ease;
+}
+
+.sentiment-tooltip:hover .info-icon {
+  color: #4a90e2;
+}
+
+.sentiment-tooltip .tooltip-content {
+  visibility: hidden;
+  width: 220px;
+  background-color: #fff;
+  color: #333;
+  text-align: left;
+  border-radius: 8px;
+  padding: 1rem;
+  position: absolute;
+  z-index: 1000;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e0e0e0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sentiment-tooltip:hover .tooltip-content {
+  visibility: visible;
+  opacity: 1;
+}
+
+.tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.tooltip-body {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.tooltip-body p {
+  margin: 0.5rem 0 0;
+}
+
+/* Arrow for the tooltip */
+.tooltip-content::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #fff transparent transparent transparent;
+}

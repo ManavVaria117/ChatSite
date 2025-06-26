@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const connectDB = require('./config/db');
 const User = require('./models/User'); // <-- Ensure User model is imported
 
@@ -173,7 +174,6 @@ io.on('connection', (socket) => {
 
     try {
         // Find the sender user to get their username and profile pic for the message object
-        // User model should be accessible here now
         const senderUser = await User.findById(senderId).select('username profilePic');
         if (!senderUser) {
             console.error('Sender user not found for ID:', senderId);
@@ -181,20 +181,34 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Create a new message instance
-        const newMessage = new Message({ // <-- Message model also needs to be imported
+        // Analyze message sentiment
+        let sentiment = 'neutral';
+        try {
+            const response = await axios.post('http://localhost:5001/api/ai/analyze-sentiment', { 
+                message: content 
+            });
+            sentiment = response.data.sentiment || 'neutral';
+            console.log(`Message sentiment: ${sentiment} for message: ${content}`);
+        } catch (err) {
+            console.error('Error analyzing sentiment:', err.message, 'Response:', err.response?.data);
+        }
+
+        // Create a new message instance with sentiment
+        const newMessage = new Message({
             sender: senderId,
             room: roomId,
             content: content,
+            sentiment: sentiment
         });
 
         // Save the message to the database
         await newMessage.save();
 
-        // Prepare the message object to send back to clients (include sender details)
+        // Prepare the message object to send back to clients (include sender details and sentiment)
         const messageToSend = {
             _id: newMessage._id,
             tempId: tempId, // Include the tempId to match with the optimistic update
+            sentiment: sentiment, // Include the analyzed sentiment
             sender: {
                 _id: senderUser._id,
                 username: senderUser.username,

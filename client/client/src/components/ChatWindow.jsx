@@ -3,7 +3,24 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatTimestamp } from '../utils/formatTimestamp';
+
+// Helper function to get emoji for sentiment
+const getSentimentEmoji = (sentiment) => {
+  switch (sentiment) {
+    case 'positive':
+      return '😊';
+    case 'negative':
+      return '😟';
+    case 'neutral':
+    default:
+      return '😐';
+  }
+};
+import SmartReplies from './chat/SmartReplies';
+import SentimentTooltip from './chat/SentimentTooltip';
 import './ChatWindow.css';
+import '../styles/sentiment.css';
+import '../styles/chat-input.css';
 
 // Replace with your backend URL
 const ENDPOINT = 'http://localhost:5000';
@@ -22,10 +39,49 @@ const ChatWindow = () => {
   const [otherUsername, setOtherUsername] = useState('Loading...');
   const [visibleReactionPickerId, setVisibleReactionPickerId] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
+  const [smartReplies, setSmartReplies] = useState([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
   const typingTimeoutsRef = useRef({});
+
+  const fetchSmartReplies = useCallback(async (message) => {
+    if (!message?.trim()) {
+      setSmartReplies([]);
+      return;
+    }
+
+    try {
+      console.log('Fetching smart replies for message:', message);
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `http://localhost:5001/api/ai/generate-replies`,
+        { 
+          message,
+          num_replies: 3
+        },
+        { 
+          headers: { 
+            'x-auth-token': token,
+            'Content-Type': 'application/json'
+          } 
+        }
+      );
+      
+      console.log('Smart replies response:', response.data);
+      
+      if (response.data?.replies?.length > 0) {
+        setSmartReplies(response.data.replies);
+      } else {
+        setSmartReplies([]);
+      }
+    } catch (error) {
+      console.error('Error fetching smart replies:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      setSmartReplies([]);
+    }
+  }, []);
 
   // Predefined rooms and emojis
   const prebuiltRooms = {
@@ -208,8 +264,17 @@ const ChatWindow = () => {
     };
     
     // Handle both regular and server-sent messages
-    socket.on('receiveMessage', handleNewMessage);
-    socket.on('newMessage', handleNewMessage);
+    const handleIncomingMessage = (message) => {
+      handleNewMessage(message);
+      
+      // Only fetch smart replies if the message is from the other user
+      if (message.sender && message.sender._id !== currentUserId) {
+        fetchSmartReplies(message.content);
+      }
+    };
+    
+    socket.on('receiveMessage', handleIncomingMessage);
+    socket.on('newMessage', handleIncomingMessage);
 
     socket.on('updateMessage', (updatedMessage) => {
       console.log('Received message update:', updatedMessage);
@@ -369,15 +434,28 @@ const ChatWindow = () => {
     // Only proceed if we have a valid socket and roomId
     if (!socket || !roomId) return;
     
+    // Clear any existing smart replies when user starts typing
+    setSmartReplies([]);
+    
     // Emit typing event when user starts typing
     if (!isTypingRef.current && message.trim() !== '') {
       isTypingRef.current = true;
-      console.log('Emitting typing event for room:', roomId);
       socket.emit('typing', roomId);
+      
+      // Fetch smart replies when user starts typing a new message
+      if (message.trim().length > 3) {
+        fetchSmartReplies(message);
+      } else {
+        setSmartReplies([]);
+      }
     } else if (message.trim() === '') {
-      // If message is empty, stop typing
+      // If message is empty, stop typing and clear smart replies
       isTypingRef.current = false;
       socket.emit('stop typing', roomId);
+      setSmartReplies([]);
+    } else if (message.trim().length > 3) {
+      // Continue fetching smart replies as user types
+      fetchSmartReplies(message);
     }
     
     // Clear any existing timeout
@@ -388,16 +466,57 @@ const ChatWindow = () => {
     // Set a timeout to emit stop typing when user pauses
     typingTimeoutRef.current = setTimeout(() => {
       if (isTypingRef.current) {
-        console.log('User stopped typing, emitting stop typing event');
         isTypingRef.current = false;
         socket.emit('stop typing', roomId);
       }
     }, 2000); // 2 seconds delay before stopping typing indicator
   };
   
-  const handleSendMessage = (e) => {
+  const analyzeMessageSentiment = useCallback(async (text) => {
+    if (!text?.trim()) return 'neutral';
+    
+    try {
+      const response = await axios.post(`/api/messages/analyze`, { text });
+      return response.data.sentiment || 'neutral';
+    } catch (error) {
+      console.error('Error analyzing sentiment:', error);
+      return 'neutral';
+    }
+  }, []);
+
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     const messageContent = newMessage.trim();
+    
+    if (!messageContent) return;
+    
+    // Analyze sentiment before sending
+    try {
+      setIsAnalyzing(true);
+      const sentiment = await analyzeMessageSentiment(messageContent);
+      
+      // Send message with sentiment
+      const message = {
+        content: messageContent,
+        room: roomId,
+        sentiment // Include sentiment with the message
+      };
+      
+      socket.emit('sendMessage', message, (response) => {
+        if (response.error) {
+          setError(response.error);
+        } else {
+          setNewMessage('');
+          // Clear smart replies after sending
+          setSmartReplies([]);
+        }
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError('Failed to send message');
+    } finally {
+      setIsAnalyzing(false);
+    }
     
     if (!messageContent || !socket || !roomId || !currentUserId) {
       console.log('Cannot send message: Missing required data', {
@@ -598,6 +717,7 @@ const ChatWindow = () => {
           <div
             key={message._id}
             className={`message ${message.sender?._id === currentUserId ? 'sent' : 'received'}`}
+            data-sentiment={message.sentiment || 'neutral'}
             onClick={() => setVisibleReactionPickerId(
               prevId => prevId === message._id ? null : message._id
             )}
@@ -609,9 +729,17 @@ const ChatWindow = () => {
             </div>
             <div className="message-content">{message.content}</div>
             <div className="message-footer">
-              <span className="timestamp" title={new Date(message.timestamp).toLocaleString()}>
-                {formatTimestamp(message.timestamp)}
-              </span>
+              <div className="message-meta">
+                <span className="timestamp" title={new Date(message.timestamp).toLocaleString()}>
+                  {formatTimestamp(message.timestamp)}
+                </span>
+                <span className="sentiment-indicator">
+                  <span className="sentiment-emoji">
+                    {getSentimentEmoji(message.sentiment || 'neutral')}
+                  </span>
+                  <SentimentTooltip sentiment={message.sentiment || 'neutral'} />
+                </span>
+              </div>
               <div className="reactions-container">
                 {formatReactions(message.reactions || []).map((reaction, idx) => {
                   const userHasReacted = reaction.users.some(u => 
@@ -659,16 +787,33 @@ const ChatWindow = () => {
           </span>
         </div>
       )}
-      <form onSubmit={handleSendMessage} className="message-input-form">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={handleInputChange}
-          placeholder="Enter message..."
-          className="message-input"
+      <div className="chat-input-container">
+        <form onSubmit={handleSendMessage} className="message-input-form">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={handleInputChange}
+            placeholder="Enter message..."
+            className="message-input"
+            disabled={isAnalyzing}
+          />
+          <button 
+            type="submit" 
+            className="send-button"
+            disabled={isAnalyzing || !newMessage.trim()}
+          >
+            {isAnalyzing ? 'Sending...' : 'Send'}
+          </button>
+        </form>
+        <SmartReplies 
+          replies={smartReplies} 
+          onSelect={(reply) => {
+            setNewMessage(reply);
+            setSmartReplies([]);
+          }} 
+          isLoading={isAnalyzing}
         />
-        <button type="submit" className="send-button">Send</button>
-      </form>
+      </div>
     </div>
   );
 };

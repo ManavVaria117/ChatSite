@@ -1,0 +1,194 @@
+/* Chat Input Container */
+.chat-input-container {
+  position: relative;
+  padding: 0.2rem 0.4rem;
+  background-color: #ffffff;
+  border-top: 1px solid #eee;
+  border-radius: 0;
+}
+
+/* Message Input Form */
+.message-input-form {
+  display: flex;
+  gap: 0.5rem;
+  position: relative;
+}
+
+/* Message Input Field */
+.message-input {
+  flex: 1;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: all 0.1s ease;
+  min-height: 24px;
+  max-height: 60px;
+  line-height: 1.1;
+  resize: none;
+  margin: 0;
+  width: 100%;
+}
+
+.message-input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+/* Send Button */
+.send-button {
+  margin-left: 0.2rem;
+  padding: 0.1rem 0.5rem;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  white-space: nowrap;
+  height: 24px;
+  min-width: 50px;
+  line-height: 1;
+}
+
+.send-button:hover:not(:disabled) {
+  background-color: #3a7bc8;
+  transform: translateY(-1px);
+}
+
+.send-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.send-button:disabled {
+  background-color: #b0c9eb;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* Smart Replies Container */
+.smart-replies-container {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 1rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+.smart-replies-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.smart-replies-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.smart-replies-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+/* Smart Reply Item */
+.smart-reply {
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem;
+  background-color: #f5f7fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.smart-reply:hover {
+  background-color: #eef2f7;
+  border-color: #cbd5e0;
+  transform: translateY(-1px);
+}
+
+.smart-reply:active {
+  transform: translateY(0);
+}
+
+/* Loading State */
+.smart-replies-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #666;
+  border-radius: 50%;
+  display: inline-block;
+  animation: loadingBounce 1.4s infinite ease-in-out both;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes loadingBounce {
+  0%, 80%, 100% { 
+    transform: scale(0);
+  } 
+  40% { 
+    transform: scale(1.0);
+  }
+}
+
+/* Empty State */
+.smart-replies-empty {
+  padding: 0.5rem 1rem;
+  color: #666;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 640px) {
+  .chat-input-container {
+    padding: 0.75rem;
+  }
+  
+  .message-input {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+  }
+  
+  .smart-replies-container {
+    left: 0.5rem;
+    right: 0.5rem;
+    padding: 0.5rem;
+  }
+  
+  .smart-reply {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+  }
+}

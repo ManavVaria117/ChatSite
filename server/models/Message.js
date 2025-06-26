@@ -18,14 +18,20 @@ const MessageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  // Add the reactions field
+  // Sentiment analysis of the message
+  sentiment: {
+    type: String,
+    enum: ['positive', 'negative', 'neutral'],
+    default: 'neutral'
+  },
+  // Reactions to the message
   reactions: [
     {
       emoji: {
         type: String, // e.g., '👍', '❤️', '😂', '😢', '🙏'
         required: true,
       },
-      // --- Keep the users array to store who reacted for counting ---
+      // Store user reactions
       users: [ // Array of user IDs who added this reaction
         {
           type: mongoose.Schema.Types.ObjectId,
