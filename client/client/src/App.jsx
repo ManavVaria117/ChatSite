@@ -4,6 +4,7 @@ import AuthForm from './components/AuthForm';
 import UserDetailsForm from './components/UserDetailsForm';
 import UserList from './components/UserList';
 import ChatWindow from './components/ChatWindow';
+import Suggestions from './pages/Suggestions';
 import Navbar from './components/Navbar'; // Import the Navbar component
 
 function App() {
@@ -33,6 +34,11 @@ function App() {
              path="/chat/:roomId"
              element={isAuthenticated ? <ChatWindow /> : <Navigate to="/auth" />}
            />
+
+          <Route
+            path="/suggestions"
+            element={isAuthenticated ? <Suggestions /> : <Navigate to="/auth" />}
+          />
 
           {/* Redirect root path */}
           {/* You might want to change the default redirect based on authentication status */}

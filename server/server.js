@@ -8,7 +8,8 @@ const userRoutes = require('./routes/users');
 const path = require('path');
 const Message = require('./models/Message'); // <-- Ensure Message model is imported
 
-const messageRoutes = require('./routes/messages'); // Import the new messages route
+const messageRoutes = require('./routes/messages'); // Import the messages route
+const suggestionRoutes = require('./routes/suggestions'); // Import the suggestions route
 // const chatRoutes = require('./routes/chat'); // Import the new chat route - REMOVED
 const http = require('http');
 const socketIo = require('socket.io');
@@ -42,6 +43,7 @@ app.use(express.json({ extended: false }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/suggestions', suggestionRoutes); // Mount the suggestions routes
 // app.use('/api/chat/:roomId', chatRoutes); // Mount the new chat routes - REMOVED
 
 // Add Socket.IO authentication middleware
@@ -141,8 +143,8 @@ io.on('connection', (socket) => {
   });
 
   // Handle receiving a message from the client via socket
-  socket.on('sendMessage', async ({ roomId, content }) => {
-    console.log(`Message received via socket in room ${roomId} from User ${socket.userId}: ${content}`);
+  socket.on('sendMessage', async ({ roomId, content, tempId }) => {
+    console.log(`Message received via socket in room ${roomId} from User ${socket.userId} (tempId: ${tempId}): ${content}`);
 
     const senderId = socket.userId; // User ID is available from authenticated socket
 
@@ -151,12 +153,12 @@ io.on('connection', (socket) => {
         socket.emit('messageError', 'Authentication required to send messages.');
         return;
     }
-     if (!roomId) {
+    if (!roomId) {
         console.error('Cannot send message: Room ID is missing.');
         socket.emit('messageError', 'Room ID is missing.');
         return;
     }
-     if (!content || !content.trim()) {
+    if (!content || !content.trim()) {
         console.error('Cannot send message: Message content is empty.');
         socket.emit('messageError', 'Message content cannot be empty.');
         return;
@@ -186,6 +188,7 @@ io.on('connection', (socket) => {
         // Prepare the message object to send back to clients (include sender details)
         const messageToSend = {
             _id: newMessage._id,
+            tempId: tempId, // Include the tempId to match with the optimistic update
             sender: {
                 _id: senderUser._id,
                 username: senderUser.username,
@@ -194,12 +197,12 @@ io.on('connection', (socket) => {
             room: newMessage.room,
             content: newMessage.content,
             timestamp: newMessage.timestamp,
+            isOptimistic: false // Mark as not an optimistic update
         };
-
 
         // Broadcast the message to the room
         io.to(roomId).emit('receiveMessage', messageToSend);
-        console.log(`Message broadcast to room ${roomId}`);
+        console.log(`Message broadcast to room ${roomId} with tempId: ${tempId}`);
 
     } catch (err) {
         console.error('Error saving or broadcasting message:', err.message);

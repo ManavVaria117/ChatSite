@@ -433,33 +433,50 @@ const ChatWindow = () => {
           <div
             key={message._id}
             className={`message ${message.sender._id === currentUserId ? 'sent' : 'received'}`}
-            onClick={(e) => {
+            onClick={() => setVisibleReactionPickerId(message._id)}
+          >
+            <div className="message-content">
+              <p>{message.content}</p>
+              <span className="message-time">{formatTimestamp(message.timestamp)}</span>
+            </div>
+            
+            {/* Display Reactions */}
+            <div className="message-reactions">
+              {formatReactions(message.reactions || []).map((reaction) => (
+                <button 
+                  key={reaction.emoji}
+                  className="reaction"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleReaction(message._id, reaction.emoji);
+                  }}
+                >
                   {reaction.emoji} {reaction.count > 0 ? reaction.count : ''}
                 </button>
               ))}
-              {/* End Display Reactions */}
             </div>
-             {/* --- New: Reaction Picker --- */}
-             {/* Show reaction picker only if this message's ID matches the visible picker ID */}
-             {visibleReactionPickerId === message._id && (
-                 <div className="reaction-picker" onClick={(e) => e.stopPropagation()}> {/* Stop propagation so clicking picker doesn't close it */}
-                    {availableEmojis.map(emoji => (
-                        <span
-                            key={emoji}
-                            className="reaction-emoji"
-                            // --- Modified: Add click handler to toggle reaction from picker ---
-                            onClick={(e) => {
-                                e.stopPropagation(); // Prevent click from closing picker
-                                handleToggleReaction(message._id, emoji); // Call the new function
-                            }}
-                            // --- End Modified ---
-                        >
-                            {emoji}
-                        </span>
-                    ))}
-                 </div>
-             )}
-             {/* --- End New: Reaction Picker --- */}
+            
+            {/* Reaction Picker */}
+            {visibleReactionPickerId === message._id && (
+              <div 
+                className="reaction-picker" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                {availableEmojis.map(emoji => (
+                  <span
+                    key={emoji}
+                    className="reaction-emoji"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleReaction(message._id, emoji);
+                      setVisibleReactionPickerId(null);
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         <div ref={messagesEndRef} /> {/* Element to scroll into view */}

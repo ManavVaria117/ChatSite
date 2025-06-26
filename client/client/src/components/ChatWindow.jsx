@@ -143,23 +143,73 @@ const ChatWindow = () => {
     socket.emit('joinRoom', roomId);
     console.log('Socket connected, joining room:', roomId);
 
-    socket.on('receiveMessage', (message) => {
-      console.log('Received new message:', message);
-      if (message.room === roomId) {
-        setMessages(prev => {
-          // Check if message already exists to prevent duplicates
-          const messageExists = prev.some(msg => msg._id === message._id);
-          if (messageExists) {
-            return prev.map(msg => 
-              msg._id === message._id 
-                ? { ...msg, ...message, reactions: message.reactions || [] }
-                : msg
-            );
-          }
-          return [...prev, { ...message, reactions: message.reactions || [] }];
-        });
+    // Track processed message IDs to prevent duplicates
+    const processedMessageIds = new Set();
+    
+    const handleNewMessage = (message) => {
+      console.log('Processing new message:', message);
+      if (message.room !== roomId) return;
+      
+      // Create a unique identifier for this message
+      const messageId = message._id || message.tempId || 
+                      `${message.sender?._id}-${message.content}-${message.timestamp}`;
+      
+      // If we've already processed this message, skip it
+      if (processedMessageIds.has(messageId)) {
+        console.log('Skipping duplicate message:', messageId);
+        return;
       }
-    });
+      
+      // Mark this message as processed
+      processedMessageIds.add(messageId);
+      
+      setMessages(prev => {
+        // Check if message already exists in the current state
+        const existingMsgIndex = prev.findIndex(msg => {
+          // Match by server ID
+          if (message._id && msg._id === message._id) return true;
+          // Match by temp ID if it's an optimistic update
+          if (message.tempId && msg.tempId === message.tempId) return true;
+          // Match by content and sender if timestamps are close
+          if (msg.content === message.content && 
+              msg.sender?._id === message.sender?._id &&
+              Math.abs(new Date(msg.timestamp) - new Date(message.timestamp)) < 5000) {
+            return true;
+          }
+          return false;
+        });
+        
+        const newMessage = { 
+          ...message, 
+          reactions: message.reactions || [],
+          // If this is a server confirmation of an optimistic update, keep the optimistic flag
+          isOptimistic: message.isOptimistic || prev.some(m => m.tempId === message.tempId)
+        };
+        
+        if (existingMsgIndex !== -1) {
+          // Update existing message but preserve the optimistic flag if it was set
+          const existingMessage = prev[existingMsgIndex];
+          const updatedMessage = {
+            ...newMessage,
+            // Preserve the optimistic flag if the existing message had it
+            isOptimistic: existingMessage.isOptimistic || newMessage.isOptimistic
+          };
+          
+          console.log('Updating existing message:', messageId);
+          const newMessages = [...prev];
+          newMessages[existingMsgIndex] = updatedMessage;
+          return newMessages;
+        } else {
+          // Add new message
+          console.log('Adding new message:', messageId);
+          return [...prev, newMessage];
+        }
+      });
+    };
+    
+    // Handle both regular and server-sent messages
+    socket.on('receiveMessage', handleNewMessage);
+    socket.on('newMessage', handleNewMessage);
 
     socket.on('updateMessage', (updatedMessage) => {
       console.log('Received message update:', updatedMessage);
@@ -247,13 +297,37 @@ const ChatWindow = () => {
     return () => {
       if (socket) {
         console.log('Cleaning up socket connection');
-        socket.off('typing');
-        socket.off('stop typing');
-        socket.off('receiveMessage');
-        socket.off('updateMessage');
-        socket.off('connect_error');
-        socket.off('authError');
+        // Remove all event listeners to prevent memory leaks
+        const events = [
+          'typing',
+          'stop typing',
+          'receiveMessage',
+          'newMessage',
+          'updateMessage',
+          'connect_error',
+          'authError',
+          'connect',
+          'disconnect',
+          'error'
+        ];
+        
+        events.forEach(event => {
+          socket.off(event);
+        });
+        
+        // Clear any pending timeouts
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        
+        // Clear all typing timeouts
+        Object.values(typingTimeoutsRef.current).forEach(timeoutId => {
+          clearTimeout(timeoutId);
+        });
+        
+        // Disconnect the socket
         socket.disconnect();
+        socket = null;
       }
     };
   }, [navigate, roomId]);
@@ -320,50 +394,78 @@ const ChatWindow = () => {
       }
     }, 2000); // 2 seconds delay before stopping typing indicator
   };
-
+  
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (newMessage.trim() && socket) {
-      // Stop typing indicator when message is sent
-      if (isTypingRef.current) {
-        socket.emit('stop typing', roomId);
-        isTypingRef.current = false;
+    const messageContent = newMessage.trim();
+    
+    if (!messageContent || !socket || !roomId || !currentUserId) {
+      console.log('Cannot send message: Missing required data', {
+        hasContent: !!messageContent,
+        hasSocket: !!socket,
+        hasRoomId: !!roomId,
+        hasUserId: !!currentUserId
+      });
+      return;
+    }
+
+    // Stop typing indicator when message is sent
+    if (isTypingRef.current) {
+      socket.emit('stop typing', roomId);
+      isTypingRef.current = false;
+    }
+    
+    // Clear any existing typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Get the current user's info
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+    const username = currentUser?.username || 'You';
+    const tempId = `temp-${Date.now()}`;
+    const timestamp = new Date();
+    
+    // Create a temporary message for optimistic update
+    const tempMessage = {
+      _id: tempId,
+      tempId,
+      sender: { 
+        _id: currentUserId,
+        username: username
+      },
+      content: messageContent,
+      timestamp,
+      reactions: [],
+      room: roomId,
+      isOptimistic: true
+    };
+
+    // Add the message to the local state first for immediate feedback
+    setMessages(prev => {
+      // Check if message already exists to prevent duplicates
+      const messageExists = prev.some(msg => 
+        msg._id === tempMessage._id || 
+        (msg.tempId && msg.tempId === tempMessage.tempId)
+      );
+      
+      if (messageExists) {
+        console.log('Message already exists, not adding again');
+        return prev;
       }
-      
-      // Clear any existing typing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      const tempId = Date.now().toString(); // Temporary ID for optimistic update
-      
-      // Get the current user's info from localStorage
-      const currentUser = JSON.parse(localStorage.getItem('user'));
-      const username = currentUser?.username || 'You';
-      
-      // Optimistically add the message with sender info
-      const tempMessage = {
-        _id: tempId,
-        sender: { 
-          _id: currentUserId,
-          username: username
-        },
-        content: newMessage,
-        timestamp: new Date(),
-        reactions: [],
-        room: roomId
-      };
-      
-      // Add the message to the local state first for immediate feedback
-      setMessages(prev => [...prev, tempMessage]);
-      setNewMessage('');
-      
-      // Send the message to the server
-      // The server will broadcast the message back with the complete sender info
+      return [...prev, tempMessage];
+    });
+    
+    // Clear the input field
+    setNewMessage('');
+
+    // Send the message to the server
+    if (socket) {
+      console.log('Emitting sendMessage event with tempId:', tempId);
       socket.emit('sendMessage', { 
         roomId, 
-        content: newMessage
-        // Don't need to send sender info as the server will get it from the socket
+        content: messageContent,
+        tempId
       });
     }
   };
