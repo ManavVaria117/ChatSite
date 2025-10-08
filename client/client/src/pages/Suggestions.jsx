@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
 import './Suggestions.css';
 
 const Suggestions = () => {
@@ -21,9 +21,7 @@ const Suggestions = () => {
   const fetchSuggestions = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/suggestions', {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await api.get('/api/suggestions');
       setSuggestions(response.data);
     } catch (err) {
       setError('Failed to fetch suggestions');
@@ -45,9 +43,7 @@ const Suggestions = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/suggestions', formData, {
-        headers: { 'x-auth-token': token }
-      });
+      await api.post('/api/suggestions', formData);
       setFormData({ name: '', description: '' });
       setShowForm(false);
       fetchSuggestions();
@@ -59,15 +55,8 @@ const Suggestions = () => {
   // Handle voting
   const handleVote = async (suggestionId, voteType) => {
     try {
-      const response = await axios.put(
-        `http://localhost:5000/api/suggestions/vote/${suggestionId}`,
-        { voteType },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-auth-token': token 
-          }
-        }
+      await api.put(`/api/suggestions/vote/${suggestionId}`,
+        { voteType }
       );
       fetchSuggestions();
     } catch (err) {
@@ -94,7 +83,8 @@ const Suggestions = () => {
         return false;
       }
       
-      const currentUserId = safeToString(userId);
+      const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+      const currentUserId = safeToString(currentUser?._id);
       if (!currentUserId) {
         console.log('hasUserVoted: No current user ID');
         return false;

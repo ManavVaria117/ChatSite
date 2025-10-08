@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, NavLink } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
 import { FaBars, FaTimes } from 'react-icons/fa';
 import './Navbar.css';
 
@@ -44,11 +44,7 @@ const Navbar = () => {
       const token = localStorage.getItem('token');
       if (isAuthenticated && token) {
         try {
-          const response = await axios.get('http://localhost:5000/api/users/me', {
-            headers: {
-              'x-auth-token': token,
-            },
-          });
+          const response = await api.get('/api/users/me');
           setUsername(response.data.username);
         } catch (error) {
           console.error('Error fetching username:', error);

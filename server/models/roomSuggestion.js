@@ -46,6 +46,11 @@ const RoomSuggestionSchema = new mongoose.Schema({
     votedAt: {
       type: Date,
       default: Date.now
+    },
+    // Add the week identifier (e.g., "2025-W41") for weekly rotation logic
+    week: {
+      type: String,
+      index: true
     }
   }],
   

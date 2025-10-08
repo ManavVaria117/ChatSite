@@ -17,7 +17,7 @@ router.post('/', auth, async (req, res) => {
     // Create a new message instance
     const newMessage = new Message({
       sender: senderId,
-      room,
+      room, // must be a Room ObjectId
       content,
     });
 

@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-import { format } from 'date-fns';
-import { startOfDay } from 'date-fns/startOfDay';
-import { addDays } from 'date-fns/addDays';
-import { differenceInMilliseconds } from 'date-fns/differenceInMilliseconds';
+import api from '../utils/api';
+import { format, startOfDay, addDays, differenceInMilliseconds } from 'date-fns';
 import './RoomStatus.css';
 
 const RoomStatus = () => {
@@ -21,10 +18,7 @@ const RoomStatus = () => {
 
   const fetchRoomStatus = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/room-status', {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await api.get('/api/room-status');
       setStatus({
         ...response.data,
         weekStart: new Date(response.data.weekStart),
@@ -88,11 +82,10 @@ const RoomStatus = () => {
 
   const handleVote = async (suggestionId, voteType) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `http://localhost:5000/api/suggestions/${suggestionId}/vote`,
+      await api.put(
+        `/api/suggestions/vote/${suggestionId}`,
         { voteType },
-        { headers: { 'x-auth-token': token } }
+        {}
       );
       // Refresh the status after voting
       window.location.reload();
