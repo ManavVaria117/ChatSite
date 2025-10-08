@@ -30,6 +30,10 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
+// Ensure unique indexes at the database level
+UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ username: 1 }, { unique: true });
+
 // Hash password before saving
 UserSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {

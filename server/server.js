@@ -7,6 +7,11 @@ const cors = require('cors'); // Import cors
 const userRoutes = require('./routes/users');
 const path = require('path');
 const Message = require('./models/Message'); // <-- Ensure Message model is imported
+const helmet = require('helmet');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
+const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 
 const messageRoutes = require('./routes/messages'); // Import the messages route
 const suggestionRoutes = require('./routes/suggestions'); // Import the suggestions route
@@ -24,10 +29,12 @@ console.log('Room rotation service initialized');
 
 
 const app = express();
+const logger = pino({ level: process.env.LOG_LEVEL || 'info', redact: ['req.headers.authorization'] });
 const server = http.createServer(app);
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(o => o.trim());
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     methods: ["GET", "POST"]
   }
 });
@@ -36,12 +43,31 @@ const io = socketIo(server, {
 connectDB(); // connectDB function handles connection internally
 
 // Init Middleware
-// Add this line to enable CORS for your Express app
-app.use(cors());
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(pinoHttp({ logger }));
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 
 // Bodyparser Middleware (if you're using express.json() or express.urlencoded())
 // Assuming you are using express.json() for parsing JSON request bodies
 app.use(express.json({ extended: false }));
+
+// Rate Limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/', apiLimiter);
 
 // Define Routes
 // Ensure User model is imported before these routes are used
@@ -306,6 +332,32 @@ io.on('connection', (socket) => {
   });
 });
 
+
+// Health and readiness endpoints
+app.get('/healthz', (req, res) => {
+  res.status(200).send('ok');
+});
+
+app.get('/readyz', (req, res) => {
+  const state = mongoose.connection.readyState; // 1 = connected
+  if (state === 1) {
+    return res.status(200).send('ready');
+  }
+  return res.status(503).send('not-ready');
+});
+
+// Centralized error handler
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (req.log && typeof req.log.error === 'function') {
+    req.log.error(err);
+  } else {
+    console.error(err);
+  }
+  const status = err.status || 500;
+  const message = status === 500 ? 'Internal Server Error' : err.message;
+  res.status(status).json({ error: { message } });
+});
 
 // Add the root route definition here, after all other specific routes
 app.use('/', (req, res) => {

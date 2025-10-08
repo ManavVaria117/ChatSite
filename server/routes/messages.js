@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth'); // Assuming you want message sending to be authenticated
 const Message = require('../models/Message'); // Import the Message model
 const User = require('../models/User'); // Import User model to get sender info if needed
+const mongoose = require('mongoose');
 
 // @route   POST api/messages
 // @desc    Send a message
@@ -47,17 +48,32 @@ router.post('/', auth, async (req, res) => {
 router.get('/:roomId', auth, async (req, res) => {
   try {
     const roomId = req.params.roomId;
+    const { before, limit } = req.query;
 
-    // Find messages for the given room, sort by timestamp, and populate sender details
-    const messages = await Message.find({ room: roomId })
-      .populate('sender', 'username profilePic') // Populate sender's username and profile pic
-      .sort('timestamp'); // Sort by timestamp ascending
+    const pageSize = Math.min(parseInt(limit, 10) || 20, 100);
 
-    res.json(messages);
+    const query = { room: roomId };
+    if (before) {
+      if (!mongoose.Types.ObjectId.isValid(before)) {
+        return res.status(400).json({ error: 'Invalid cursor' });
+      }
+      query._id = { $lt: new mongoose.Types.ObjectId(before) };
+    }
 
+    const docs = await Message.find(query)
+      .sort({ _id: -1 })
+      .limit(pageSize + 1)
+      .populate('sender', 'username profilePic');
+
+    const hasMore = docs.length > pageSize;
+    const items = hasMore ? docs.slice(0, pageSize) : docs;
+    const nextCursor = hasMore ? items[items.length - 1]._id : null;
+
+    // Return ascending order for UI (oldest first) while paginating newest-first internally
+    return res.json({ items: items.reverse(), nextCursor, hasMore });
   } catch (err) {
-    console.error(err.message); // <-- This line logs the specific error on the server
-    res.status(500).send('Server Error');
+    console.error(err.message);
+    return res.status(500).send('Server Error');
   }
 });
 

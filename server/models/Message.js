@@ -37,6 +37,10 @@ const MessageSchema = new mongoose.Schema({
   ]
 });
 
+// Indexes to speed up room queries and pagination
+MessageSchema.index({ room: 1, _id: -1 });
+MessageSchema.index({ room: 1, timestamp: -1 });
+
 // Update room's last activity when a new message is saved
 MessageSchema.post('save', async function(doc) {
   try {
