@@ -224,7 +224,7 @@ const ChatWindow = () => {
       console.error('Socket authentication error:', msg);
       setError('Chat authentication failed. Please log in again.');
       localStorage.removeItem('token');
-      navigate('/login');
+      navigate('/auth');
     });
     
     // Typing indicators

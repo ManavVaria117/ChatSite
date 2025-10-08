@@ -201,7 +201,7 @@ io.on('connection', (socket) => {
                 username: senderUser.username,
                 // profilePic: senderUser.profilePic,
             },
-            room: newMessage.room,
+            room: newMessage.room.toString(),
             content: newMessage.content,
             timestamp: newMessage.timestamp,
             isOptimistic: false // Mark as not an optimistic update
