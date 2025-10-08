@@ -9,6 +9,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
   const navRef = useRef(null);
   const isAuthenticated = !!localStorage.getItem('token');
   
@@ -36,6 +37,21 @@ const Navbar = () => {
   // Toggle mobile menu
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+    } else {
+      root.removeAttribute('data-theme');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   // Fetch username when the component mounts or isAuthenticated changes
@@ -92,6 +108,14 @@ const Navbar = () => {
         <Link to="/" className="navbar-brand" onClick={handleNavClick}>
           ChatApp
         </Link>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? '🌙' : '☀️'}
+        </button>
         <ul className={`nav-links ${isMenuOpen ? 'active' : ''}`}>
           {username && <li className="welcome">Hello, {username}!</li>}
           <li>
