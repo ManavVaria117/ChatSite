@@ -3,6 +3,7 @@ const router = express.Router();
 const { check, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
 const RoomSuggestion = require('../models/roomSuggestion');
+const { getWeek } = require('../utils/dateUtils');
 
 // @route   POST api/suggestions
 // @desc    Create a room suggestion
@@ -192,13 +193,15 @@ router.put(
           // Change vote type
           existingVote.voteType = req.body.voteType;
           existingVote.votedAt = Date.now();
+          existingVote.week = getWeek();
         }
       } else {
         // Add new vote
         suggestion.votes.push({
           user: req.user.id,
           voteType: req.body.voteType,
-          votedAt: Date.now()
+          votedAt: Date.now(),
+          week: getWeek()
         });
       }
 

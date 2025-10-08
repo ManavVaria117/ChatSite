@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
-import axios from 'axios';
+import api from '../utils/api';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatTimestamp } from '../utils/formatTimestamp';
 import './ChatWindow.css';
@@ -27,13 +27,7 @@ const ChatWindow = () => {
   const isTypingRef = useRef(false);
   const typingTimeoutsRef = useRef({});
 
-  // Predefined rooms and emojis
-  const prebuiltRooms = {
-    'general-chat': 'General Chat',
-    'sports': 'Sports Talk',
-    'technology': 'Tech Discussion',
-    'random': 'Random Chat',
-  };
+  // Emojis list only; room names will be fetched by id when needed
 
   const availableEmojis = ['👍', '❤️', '😂', '😢', '🙏'];
 
@@ -43,60 +37,39 @@ const ChatWindow = () => {
     if (!token) {
       setError('Authentication required.');
       setLoadingHistory(false);
-      navigate('/login');
+      navigate('/auth');
       return;
     }
 
     const fetchCurrentUser = async () => {
       try {
-        const userResponse = await axios.get(`${ENDPOINT}/api/users/me`, {
-          headers: { 'x-auth-token': token }
-        });
+        const userResponse = await api.get('/api/users/me');
         setCurrentUserId(userResponse.data._id);
       } catch (err) {
         console.error('Error fetching current user:', err);
         setError('Failed to load user details.');
-        navigate('/login');
+        navigate('/auth');
       }
     };
 
     fetchCurrentUser();
   }, [navigate]);
 
-  // Determine chat name based on room type
+  // Determine chat name based on room id (Room document)
   useEffect(() => {
-    if (!currentUserId || !roomId) return;
-
-    const determineChatName = async () => {
-      if (prebuiltRooms[roomId]) {
-        setOtherUsername(prebuiltRooms[roomId]);
-      } else {
-        try {
-          const userIds = roomId.split('_');
-          const otherUserId = userIds.find(id => id !== currentUserId);
-          if (!otherUserId) {
-            setOtherUsername('Error');
-            return;
-          }
-
-          const token = localStorage.getItem('token');
-          if (!token) {
-            setOtherUsername('Error');
-            return;
-          }
-
-          const userResponse = await axios.get(`${ENDPOINT}/api/users/${otherUserId}`, {
-            headers: { 'x-auth-token': token }
-          });
-          setOtherUsername(userResponse.data.username);
-        } catch (err) {
-          console.error('Error fetching other user details:', err);
-          setOtherUsername('Error');
-        }
+    if (!roomId) return;
+    const fetchRoom = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const resp = await api.get(`/api/rooms/${roomId}`);
+        // Prefer description as display name; fallback to name
+        setOtherUsername(resp.data.description || resp.data.name || 'Chat');
+      } catch (e) {
+        console.error('Error fetching room info:', e);
+        setOtherUsername('Chat');
       }
     };
-
-    determineChatName();
+    fetchRoom();
   }, [currentUserId, roomId]);
 
   // Fetch message history
@@ -104,9 +77,7 @@ const ChatWindow = () => {
     const fetchMessageHistory = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get(`${ENDPOINT}/api/messages/${roomId}`, {
-          headers: { 'x-auth-token': token }
-        });
+        const response = await api.get(`/api/messages/${roomId}`);
         setMessages(response.data);
         setLoadingHistory(false);
       } catch (err) {
@@ -240,14 +211,20 @@ const ChatWindow = () => {
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err.message);
-      setError('Failed to connect to chat server.');
+      if (err && /auth/i.test(err.message)) {
+        setError('Chat authentication failed. Please log in again.');
+        localStorage.removeItem('token');
+        navigate('/auth');
+      } else {
+        setError('Failed to connect to chat server.');
+      }
     });
 
     socket.on('authError', (msg) => {
       console.error('Socket authentication error:', msg);
       setError('Chat authentication failed. Please log in again.');
       localStorage.removeItem('token');
-      navigate('/login');
+      navigate('/auth');
     });
     
     // Typing indicators

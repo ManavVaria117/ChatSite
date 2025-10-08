@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios'; // Import axios
+import api from '../utils/api'; // Centralized axios instance
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 const AuthForm = () => {
@@ -31,18 +31,17 @@ const AuthForm = () => {
     e.preventDefault();
     console.log('Login Data:', loginFormData);
     try {
-        const response = await axios.post('http://localhost:5000/api/auth/login', loginFormData);
+        const response = await api.post('/api/auth/login', loginFormData);
 
         console.log('Login successful:', response.data);
         localStorage.setItem('token', response.data.token);
 
         // After successful login, fetch user details to check if they are complete
         const token = response.data.token; // Use the token received from login
-        const userDetailsResponse = await axios.get('http://localhost:5000/api/users/me', {
-           headers: {
-             'x-auth-token': token,
-           }
-        });
+        const userDetailsResponse = await api.get('/api/users/me');
+
+        // Persist current user for client usage (e.g., chat, suggestions)
+        localStorage.setItem('user', JSON.stringify(userDetailsResponse.data));
 
         // Check if user details are complete (e.g., profile picture exists)
         if (userDetailsResponse.data && userDetailsResponse.data.profilePic) {
@@ -83,7 +82,7 @@ const AuthForm = () => {
     }
     console.log('Register Data:', registerFormData);
      try {
-        const response = await axios.post('http://localhost:5000/api/auth/register', {
+        const response = await api.post('/api/auth/register', {
             username: registerFormData.username,
             email: registerFormData.email,
             password: registerFormData.password
@@ -91,6 +90,13 @@ const AuthForm = () => {
 
         console.log('Registration successful:', response.data);
         localStorage.setItem('token', response.data.token);
+        // Fetch and persist the freshly created user profile for downstream screens
+        try {
+          const me = await api.get('/api/users/me');
+          localStorage.setItem('user', JSON.stringify(me.data));
+        } catch (e) {
+          console.warn('Unable to fetch user after registration; continuing to details.', e);
+        }
         // After successful registration, navigate to the details page
         // User details will definitely be incomplete after registration
         console.log('Registration successful, navigating to details form.');

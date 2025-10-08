@@ -11,6 +11,7 @@ const Message = require('./models/Message'); // <-- Ensure Message model is impo
 const messageRoutes = require('./routes/messages'); // Import the messages route
 const suggestionRoutes = require('./routes/suggestions'); // Import the suggestions route
 const roomStatusRoutes = require('./routes/roomStatus'); // Import room status route
+const roomRoutes = require('./routes/rooms');
 // const chatRoutes = require('./routes/chat'); // Import the new chat route - REMOVED
 const http = require('http');
 const socketIo = require('socket.io');
@@ -27,7 +28,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
     methods: ["GET", "POST"]
   }
 });
@@ -39,9 +40,8 @@ connectDB(); // connectDB function handles connection internally
 // Add this line to enable CORS for your Express app
 app.use(cors());
 
-// Bodyparser Middleware (if you're using express.json() or express.urlencoded())
-// Assuming you are using express.json() for parsing JSON request bodies
-app.use(express.json({ extended: false }));
+// Body parsing
+app.use(express.json());
 
 // Define Routes
 // Ensure User model is imported before these routes are used
@@ -50,6 +50,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/suggestions', suggestionRoutes); // Mount the suggestions routes
 app.use('/api/room-status', roomStatusRoutes); // Mount the room status routes
+app.use('/api/rooms', roomRoutes);
 // app.use('/api/chat/:roomId', chatRoutes); // Mount the new chat routes - REMOVED
 
 // Add Socket.IO authentication middleware
@@ -200,7 +201,7 @@ io.on('connection', (socket) => {
                 username: senderUser.username,
                 // profilePic: senderUser.profilePic,
             },
-            room: newMessage.room,
+            room: newMessage.room.toString(),
             content: newMessage.content,
             timestamp: newMessage.timestamp,
             isOptimistic: false // Mark as not an optimistic update
