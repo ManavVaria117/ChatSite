@@ -1,49 +1,72 @@
 :root {
+  /* Typography */
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Palette - Light (defaults) */
+  --primary-color: #2c3e50;
+  --secondary-color: #3498db;
+  --background-color: #f4f4f4;
+  --surface-color: #ffffff;
+  --text-color: #333333;
+  --text-muted: #666666;
+  --border-color: #e5e7eb;
+  --link-color: #646cff;
+  --link-hover: #535bf2;
+  --accent-green: #28a745;
+  --accent-green-hover: #218838;
+  --accent-red: #dc3545;
+  --accent-red-hover: #c0392b;
+  --bubble-sent-bg: #e7f3ff;
+  --bubble-received-bg: #f1f5f9;
+  --bubble-text: #1f2937;
 
+  /* Effects */
+  --border-radius: 8px;
+  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --transition: all 0.25s ease;
+
+  /* Rendering */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+  --primary-color: #0f172a; /* slate-900 */
+  --secondary-color: #60a5fa; /* blue-400 */
+  --background-color: #0b1220; /* deep slate */
+  --surface-color: #111827; /* gray-900 */
+  --text-color: #e5e7eb; /* gray-200 */
+  --text-muted: #9ca3af; /* gray-400 */
+  --border-color: #1f2937; /* gray-800 */
+  --link-color: #93c5fd; /* blue-300 */
+  --link-hover: #bfdbfe; /* blue-200 */
+  --accent-green: #22c55e;
+  --accent-green-hover: #16a34a;
+  --accent-red: #ef4444;
+  --accent-red-hover: #dc2626;
+  --bubble-sent-bg: #1d4ed8; /* blue-700 */
+  --bubble-received-bg: #1f2937; /* gray-800 */
+  --bubble-text: #e5e7eb;
+  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--link-color);
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: var(--link-hover);
 }
 
 
 /* Remove default Vite styles */
-/* Add your custom styles here */
-
 /* Basic styles for the root and body */
-:root {
-  --primary-color: #2c3e50;
-  --secondary-color: #3498db;
-  --background-color: #f4f4f4;
-  --text-color: #333;
-  --border-radius: 8px;
-  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  --transition: all 0.3s ease;
-  
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
 
 * {
   box-sizing: border-box;
@@ -70,6 +93,7 @@ body {
   overflow-x: hidden;
   width: 100%;
   position: relative;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* Add padding to main content to prevent overlap with fixed navbar */
@@ -93,10 +117,10 @@ body {
 
 /* Custom styles for the AuthForm component */
 .auth-container {
-  background-color: #ffffff; /* White background */
+  background-color: var(--surface-color);
   padding: 2rem; /* Reduced padding for mobile */
   border-radius: 8px; /* Rounded corners */
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+  box-shadow: var(--box-shadow);
   width: 100%;
   max-width: 400px; /* Max width for the form container */
   box-sizing: border-box;
@@ -114,7 +138,7 @@ body {
   font-weight: 600;
   margin-bottom: 1.5rem; /* Space below title */
   text-align: center; /* Center the title text */
-  color: #333; /* Dark text color */
+  color: var(--text-color);
 }
 
 .form-group {
@@ -126,7 +150,7 @@ body {
   display: block; /* Make label a block element */
   font-size: 0.9rem; /* Small font size */
   font-weight: 500;
-  color: #555; /* Gray text */
+  color: var(--text-muted);
   margin-bottom: 0.4rem; /* Space below label */
 }
 
@@ -134,12 +158,12 @@ body {
   display: block; /* Make input a block element */
   width: 90%; /* Full width */
   padding: 0.75rem 1rem; /* Padding inside input */
-  border: 1px solid #ccc; /* Light gray border */
+  border: 1px solid var(--border-color);
   border-radius: 4px; /* Rounded corners */
   font-size: 1rem;
   line-height: 1.5;
-  color: #333; /* Dark text */
-  background-color: #ffffff;
+  color: var(--text-color);
+  background-color: var(--surface-color);
   transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
   margin: 0 auto; /* Center input horizontally */
   box-sizing: border-box;
@@ -147,8 +171,8 @@ body {
 
 .form-input:focus {
   outline: none;
-  border-color: #007bff; /* Blue border on focus */
-  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Blue shadow on focus */
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 0.2rem color-mix(in oklab, var(--secondary-color) 25%, transparent);
 }
 
 .auth-button {
@@ -167,19 +191,19 @@ body {
 }
 
 .auth-button.primary {
-  background-color: #007bff; /* Blue background */
+  background-color: var(--secondary-color);
 }
 
 .auth-button.primary:hover {
-  background-color: #0056b3; /* Darker blue on hover */
+  filter: brightness(0.9);
 }
 
 .auth-button.success {
-  background-color: #28a745; /* Green background */
+  background-color: var(--accent-green);
 }
 
 .auth-button.success:hover {
-  background-color: #218838; /* Darker green on hover */
+  background-color: var(--accent-green-hover);
 }
 
 .toggle-text {
@@ -216,12 +240,12 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: var(--primary-color);
   cursor: pointer;
   transition: border-color 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: var(--link-color);
 }
 button:focus,
 button:focus-visible {
@@ -248,9 +272,9 @@ button:focus-visible {
   max-width: 500px;
   margin: 20px auto; /* Adjusted margin for mobile */
   padding: 20px; /* Adjusted padding for mobile */
-  background-color: #ffffff;
+  background-color: var(--surface-color);
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
   font-family: sans-serif; /* Or your preferred font */
   box-sizing: border-box;
   width: 100%; /* Ensure it takes full width on small screens */
@@ -272,7 +296,7 @@ button:focus-visible {
 .user-details-container h2 {
   text-align: center;
   margin-bottom: 20px; /* Adjusted margin */
-  color: #333;
+  color: var(--text-color);
   font-size: 1.8rem; /* Adjusted font size */
 }
 
@@ -293,7 +317,7 @@ button:focus-visible {
 .user-details-container .form-group input[type="file"] { /* Include file input */
   width: 100%;
   padding: 8px; /* Adjusted padding */
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   box-sizing: border-box; /* Include padding and border in the element's total width and height */
   font-size: 1rem;
@@ -309,7 +333,7 @@ button:focus-visible {
 .user-details-submit-button {
   width: 100%;
   padding: 12px;
-  background-color: #007bff; /* Primary blue color */
+  background-color: var(--secondary-color);
   color: white;
   border: none;
   border-radius: 4px;
@@ -320,23 +344,23 @@ button:focus-visible {
 }
 
 .user-details-submit-button:hover {
-  background-color: #0056b3; /* Darker blue on hover */
+  filter: brightness(0.9);
 }
 /* Styles for the User List Container */
 .user-list-container {
   max-width: 600px;
   margin: 20px auto;
   padding: 15px; /* Adjusted padding */
-  background-color: #f9f9f9;
+  background-color: color-mix(in oklab, var(--surface-color) 96%, var(--text-color) 4%);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
   box-sizing: border-box;
   width: 100%; /* Ensure it takes full width on small screens */
 }
 
 .user-list-container h2 {
   text-align: center;
-  color: #333;
+  color: var(--text-color);
   margin-bottom: 15px; /* Adjusted margin */
   font-size: 1.8rem; /* Adjusted font size */
 }
@@ -424,7 +448,7 @@ button:focus-visible {
 /* Optional: Hover effect for list items */
 /* Removed the pointer cursor from the li itself as buttons are now clickable */
 .user-list-item:hover {
-  background-color: #e9e9e9;
+  background-color: color-mix(in oklab, var(--surface-color) 92%, var(--text-color) 8%);
   /* cursor: pointer; */
 }
 
@@ -439,11 +463,11 @@ button:focus-visible {
 }
 
 .user-status-indicator.online {
-  background-color: #28a745; /* Green for online */
+  background-color: var(--accent-green);
 }
 
 .user-status-indicator.offline {
-  background-color: #dc3545; /* Red for offline */
+  background-color: var(--accent-red);
 }
 
 /* Basic Chat Window Styles */
@@ -451,9 +475,9 @@ button:focus-visible {
   max-width: 700px;
   margin: 20px auto;
   padding: 15px; /* Adjusted padding */
-  background-color: #fff;
+  background-color: var(--surface-color);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--box-shadow);
   display: flex;
   flex-direction: column;
   height: 80vh; /* Adjust height as needed */
@@ -464,26 +488,26 @@ button:focus-visible {
 .chat-window-container h2 {
   text-align: center;
   margin-bottom: 15px; /* Adjusted margin */
-  color: #333;
+  color: var(--text-color);
   font-size: 1.8rem; /* Adjusted font size */
 }
 
 .message-list {
   flex-grow: 1; /* Allows message list to take available space */
   overflow-y: auto; /* Add scrollbar if messages exceed height */
-  border: 1px solid #eee;
+  border: 1px solid var(--border-color);
   padding: 10px;
   margin-bottom: 15px;
   display: flex;
   flex-direction: column; /* Stack messages vertically */
 }
 .message-content{
-  color: #1a1a1a;
+  color: var(--bubble-text);
 }
 
 .timestamp{
   font-size: 0.7em; /* Smaller timestamp font */
-  color: #888;
+  color: var(--text-muted);
   margin-top: 3px; /* Adjusted margin */
   text-align: right;
 }
@@ -500,7 +524,7 @@ button:focus-visible {
 .message .sender-username {
   font-weight: bold;
   margin-right: 5px;
-  color: #007bff; /* Example sender color */
+  color: var(--secondary-color);
   font-size: 0.9em; /* Adjusted font size */
 }
 
