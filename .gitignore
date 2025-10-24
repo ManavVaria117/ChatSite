@@ -5,6 +5,9 @@
 # Node modules
 node_modules/
 
+.venv/.env
+.venv/.env.example
+
 # Python
 __pycache__/
 *.py[cod]
