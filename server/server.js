@@ -18,9 +18,23 @@ const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken'); // Import jwt
 require('dotenv').config(); // Ensure dotenv is loaded
 
+const winston = require('winston');
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'combined.log' })
+  ]
+});
+
 // Initialize room rotation service
 const roomRotationService = require('./services/roomRotationService');
-console.log('Room rotation service initialized');
+logger.info('Room rotation service initialized');
 
 
 
@@ -28,7 +42,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"]
   }
 });
@@ -61,7 +75,7 @@ io.use((socket, next) => {
   }
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
-      console.error('JWT verification error:', err.message); // Log the JWT error
+      logger.error('JWT verification error:', err.message); // Log the JWT error
       return next(new Error('Authentication error: Invalid token'));
     }
     socket.userId = decoded.user.id; // Attach user ID to the socket
@@ -72,7 +86,7 @@ io.use((socket, next) => {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id, 'User ID:', socket.userId);
+  logger.info('New client connected:', socket.id, 'User ID:', socket.userId);
 
   // Handle joining a room
   socket.on('joinRoom', (roomId) => {
@@ -184,8 +198,9 @@ io.on('connection', (socket) => {
         // Analyze message sentiment
         let sentiment = 'neutral';
         try {
-            const response = await axios.post('http://localhost:5001/api/ai/analyze-sentiment', { 
-                message: content 
+            const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5001';
+            const response = await axios.post(`${aiServiceUrl}/api/ai/analyze-sentiment`, {
+                message: content
             });
             sentiment = response.data.sentiment || 'neutral';
             console.log(`Message sentiment: ${sentiment} for message: ${content}`);
@@ -321,11 +336,19 @@ io.on('connection', (socket) => {
 });
 
 
-// Add the root route definition here, after all other specific routes
-app.use('/', (req, res) => {
-  res.send('API Running');
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    services: {
+      database: 'connected',
+      ai_service: 'available'
+    }
+  });
 });
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(PORT, () => logger.info(`Server started on port ${PORT}`));

@@ -25,10 +25,17 @@ def create_app():
         }
     })
     
-    # Simple test route
-    @app.route('/')
-    def index():
-        return 'API Running'
+    # Health check endpoint
+    @app.route('/health')
+    def health_check():
+        return jsonify({
+            "status": "healthy",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "services": {
+                "ai_service": "running",
+                "text_processing": "available"
+            }
+        }), 200
     
     # Import and register blueprints
     try:

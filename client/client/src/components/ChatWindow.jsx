@@ -2,9 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { formatTimestamp } from '../utils/formatTimestamp';
+import SmartReplies from './chat/SmartReplies';
+import SentimentTooltip from './chat/SentimentTooltip';
+import './ChatWindow.css';
+import '../styles/sentiment.css';
+import '../styles/chat-input.css';
 
-// Helper function to get emoji for sentiment
+// Replace with your backend URL
+const ENDPOINT = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const getSentimentEmoji = (sentiment) => {
   switch (sentiment) {
     case 'positive':
@@ -16,16 +24,9 @@ const getSentimentEmoji = (sentiment) => {
       return '😐';
   }
 };
-import SmartReplies from './chat/SmartReplies';
-import SentimentTooltip from './chat/SentimentTooltip';
-import './ChatWindow.css';
-import '../styles/sentiment.css';
-import '../styles/chat-input.css';
 
-// Replace with your backend URL
-const ENDPOINT = 'http://localhost:5000';
-
-let socket;
+// top-level socket (keeps a single connection across component mounts)
+let socket = null;
 
 const ChatWindow = () => {
   const { roomId } = useParams();
@@ -41,11 +42,22 @@ const ChatWindow = () => {
   const [typingUsers, setTypingUsers] = useState({});
   const [smartReplies, setSmartReplies] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
   const typingTimeoutsRef = useRef({});
 
+  const prebuiltRooms = {
+    'general-chat': 'General Chat',
+    'sports': 'Sports Talk',
+    'technology': 'Tech Discussion',
+    'random': 'Random Chat',
+  };
+
+  const availableEmojis = ['👍', '❤️', '😂', '😢', '🙏'];
+
+  // fetch smart replies
   const fetchSmartReplies = useCallback(async (message) => {
     if (!message?.trim()) {
       setSmartReplies([]);
@@ -56,42 +68,36 @@ const ChatWindow = () => {
       console.log('Fetching smart replies for message:', message);
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        `http://localhost:5001/api/ai/generate-replies`,
-        { 
-          message,
-          num_replies: 3
-        },
-        { 
-          headers: { 
-            'x-auth-token': token,
-            'Content-Type': 'application/json'
-          } 
-        }
+        `${import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:5001'}/api/ai/generate-replies`,
+        { message, num_replies: 3 },
+        { headers: { 'x-auth-token': token, 'Content-Type': 'application/json' } }
       );
-      
+
       console.log('Smart replies response:', response.data);
-      
       if (response.data?.replies?.length > 0) {
         setSmartReplies(response.data.replies);
       } else {
         setSmartReplies([]);
       }
-    } catch (error) {
-      console.error('Error fetching smart replies:', error);
-      console.error('Error details:', error.response?.data || error.message);
+    } catch (err) {
+      console.error('Error fetching smart replies:', err);
       setSmartReplies([]);
     }
   }, []);
 
-  // Predefined rooms and emojis
-  const prebuiltRooms = {
-    'general-chat': 'General Chat',
-    'sports': 'Sports Talk',
-    'technology': 'Tech Discussion',
-    'random': 'Random Chat',
-  };
-
-  const availableEmojis = ['👍', '❤️', '😂', '😢', '🙏'];
+  // sentiment analyzer
+  const analyzeMessageSentiment = useCallback(async (text) => {
+    if (!text?.trim()) return 'neutral';
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:5001'}/api/ai/analyze-sentiment`, {
+        message: text
+      });
+      return response.data.sentiment || 'neutral';
+    } catch (err) {
+      console.error('Error analyzing sentiment:', err);
+      return 'neutral';
+    }
+  }, []);
 
   // Fetch current user details
   useEffect(() => {
@@ -112,14 +118,17 @@ const ChatWindow = () => {
       } catch (err) {
         console.error('Error fetching current user:', err);
         setError('Failed to load user details.');
+        localStorage.removeItem('token');
         navigate('/login');
+      } finally {
+        setLoadingHistory(false);
       }
     };
 
     fetchCurrentUser();
   }, [navigate]);
 
-  // Determine chat name based on room type
+  // Determine chat name
   useEffect(() => {
     if (!currentUserId || !roomId) return;
 
@@ -163,148 +172,124 @@ const ChatWindow = () => {
         const response = await axios.get(`${ENDPOINT}/api/messages/${roomId}`, {
           headers: { 'x-auth-token': token }
         });
-        setMessages(response.data);
-        setLoadingHistory(false);
+        setMessages(response.data || []);
       } catch (err) {
         console.error('Error fetching message history:', err);
         setError('Failed to load message history.');
+      } finally {
         setLoadingHistory(false);
       }
     };
 
-    if (roomId) {
-      fetchMessageHistory();
-    }
+    if (roomId) fetchMessageHistory();
   }, [roomId]);
 
-  // Set up socket connection
+  // Socket setup — depends on roomId and currentUserId
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token || !roomId) return;
+    if (!token || !roomId || !currentUserId) return;
 
-    // Disconnect any existing socket connection
-    if (socket) {
-      socket.disconnect();
+    // If socket exists but room changed, disconnect and recreate
+    if (socket && socket.roomId !== roomId) {
+      try {
+        socket.disconnect();
+      } catch (e) { /* ignore */ }
+      socket = null;
     }
 
-    // Create new socket connection
-    socket = io(ENDPOINT, {
-      query: { token, roomId },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
-    
-    // Join the room
+    if (!socket) {
+      socket = io(ENDPOINT, {
+        query: { token, roomId },
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+      socket.roomId = roomId;
+    }
+
+    // join room
     socket.emit('joinRoom', roomId);
     console.log('Socket connected, joining room:', roomId);
 
-    // Track processed message IDs to prevent duplicates
     const processedMessageIds = new Set();
-    
+
     const handleNewMessage = (message) => {
-      console.log('Processing new message:', message);
-      if (message.room !== roomId) return;
-      
-      // Create a unique identifier for this message
-      const messageId = message._id || message.tempId || 
-                      `${message.sender?._id}-${message.content}-${message.timestamp}`;
-      
-      // If we've already processed this message, skip it
+      if (!message) return;
+      if (message.room && message.room !== roomId) return;
+
+      const messageId = message._id || message.tempId ||
+        `${message.sender?._id}-${message.content}-${message.timestamp}`;
+
       if (processedMessageIds.has(messageId)) {
-        console.log('Skipping duplicate message:', messageId);
         return;
       }
-      
-      // Mark this message as processed
       processedMessageIds.add(messageId);
-      
+
       setMessages(prev => {
-        // Check if message already exists in the current state
         const existingMsgIndex = prev.findIndex(msg => {
-          // Match by server ID
           if (message._id && msg._id === message._id) return true;
-          // Match by temp ID if it's an optimistic update
           if (message.tempId && msg.tempId === message.tempId) return true;
-          // Match by content and sender if timestamps are close
-          if (msg.content === message.content && 
+          if (msg.content === message.content &&
               msg.sender?._id === message.sender?._id &&
               Math.abs(new Date(msg.timestamp) - new Date(message.timestamp)) < 5000) {
             return true;
           }
           return false;
         });
-        
-        const newMessage = { 
-          ...message, 
+
+        const newMessage = {
+          ...message,
           reactions: message.reactions || [],
-          // If this is a server confirmation of an optimistic update, keep the optimistic flag
           isOptimistic: message.isOptimistic || prev.some(m => m.tempId === message.tempId)
         };
-        
+
         if (existingMsgIndex !== -1) {
-          // Update existing message but preserve the optimistic flag if it was set
           const existingMessage = prev[existingMsgIndex];
           const updatedMessage = {
+            ...existingMessage,
             ...newMessage,
-            // Preserve the optimistic flag if the existing message had it
             isOptimistic: existingMessage.isOptimistic || newMessage.isOptimistic
           };
-          
-          console.log('Updating existing message:', messageId);
           const newMessages = [...prev];
           newMessages[existingMsgIndex] = updatedMessage;
           return newMessages;
         } else {
-          // Add new message
-          console.log('Adding new message:', messageId);
           return [...prev, newMessage];
         }
       });
     };
-    
-    // Handle both regular and server-sent messages
+
     const handleIncomingMessage = (message) => {
       handleNewMessage(message);
-      
-      // Only fetch smart replies if the message is from the other user
-      if (message.sender && message.sender._id !== currentUserId) {
+
+      if (message?.sender && message.sender._id !== currentUserId) {
         fetchSmartReplies(message.content);
       }
     };
-    
+
     socket.on('receiveMessage', handleIncomingMessage);
     socket.on('newMessage', handleIncomingMessage);
 
     socket.on('updateMessage', (updatedMessage) => {
-      console.log('Received message update:', updatedMessage);
+      if (!updatedMessage) return;
       setMessages(prev => {
-        // Ensure reactions array exists
         const messageWithReactions = {
           ...updatedMessage,
           reactions: Array.isArray(updatedMessage.reactions) ? updatedMessage.reactions : []
         };
-        
-        const messageIndex = prev.findIndex(msg => msg._id === messageWithReactions._id);
-        
-        if (messageIndex !== -1) {
-          // Update existing message while preserving any local state
+        const idx = prev.findIndex(m => m._id === messageWithReactions._id);
+        if (idx !== -1) {
           const newMessages = [...prev];
-          newMessages[messageIndex] = {
-            ...newMessages[messageIndex],
-            ...messageWithReactions,
-            reactions: messageWithReactions.reactions
-          };
+          newMessages[idx] = { ...newMessages[idx], ...messageWithReactions };
           return newMessages;
         } else {
-          // Add new message if it doesn't exist
           return [...prev, messageWithReactions];
         }
       });
     });
 
     socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err.message);
+      console.error('Socket connection error:', err?.message || err);
       setError('Failed to connect to chat server.');
     });
 
@@ -314,22 +299,16 @@ const ChatWindow = () => {
       localStorage.removeItem('token');
       navigate('/login');
     });
-    
-    // Typing indicators
-    socket.on('typing', ({ roomId: typingRoomId, userId, username }) => {
-      console.log(`User ${username} is typing in room ${typingRoomId}`);
-      if (typingRoomId === roomId && userId !== currentUserId) {
-        setTypingUsers(prev => ({
-          ...prev,
-          [userId]: username
-        }));
 
-        // Clear any existing timeout for this user
+    // typing indicators
+    socket.on('typing', ({ roomId: typingRoomId, userId, username }) => {
+      if (typingRoomId === roomId && userId !== currentUserId) {
+        setTypingUsers(prev => ({ ...prev, [userId]: username }));
+
         if (typingTimeoutsRef.current[userId]) {
           clearTimeout(typingTimeoutsRef.current[userId]);
         }
 
-        // Set a timeout to automatically remove the typing indicator after 3 seconds
         typingTimeoutsRef.current[userId] = setTimeout(() => {
           setTypingUsers(prev => {
             const newTypingUsers = { ...prev };
@@ -342,358 +321,248 @@ const ChatWindow = () => {
     });
 
     socket.on('stop typing', ({ roomId: typingRoomId, userId }) => {
-      console.log(`User ${userId} stopped typing in room ${typingRoomId}`);
       if (typingRoomId === roomId && userId !== currentUserId) {
         setTypingUsers(prev => {
           const newTypingUsers = { ...prev };
           delete newTypingUsers[userId];
           return newTypingUsers;
         });
-        
-        // Clear the timeout since we're explicitly stopping typing
         if (typingTimeoutsRef.current[userId]) {
           clearTimeout(typingTimeoutsRef.current[userId]);
           delete typingTimeoutsRef.current[userId];
         }
       }
     });
-    
-    // Cleanup function
+
+    // cleanup
     return () => {
       if (socket) {
-        console.log('Cleaning up socket connection');
-        // Remove all event listeners to prevent memory leaks
-        const events = [
-          'typing',
-          'stop typing',
-          'receiveMessage',
-          'newMessage',
-          'updateMessage',
-          'connect_error',
-          'authError',
-          'connect',
-          'disconnect',
-          'error'
-        ];
-        
-        events.forEach(event => {
-          socket.off(event);
-        });
-        
-        // Clear any pending timeouts
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
-        
-        // Clear all typing timeouts
-        Object.values(typingTimeoutsRef.current).forEach(timeoutId => {
-          clearTimeout(timeoutId);
-        });
-        
-        // Disconnect the socket
-        socket.disconnect();
+        socket.off('receiveMessage');
+        socket.off('newMessage');
+        socket.off('updateMessage');
+        socket.off('connect_error');
+        socket.off('authError');
+        socket.off('typing');
+        socket.off('stop typing');
+        try {
+          socket.disconnect();
+        } catch (e) { /* ignore */ }
         socket = null;
       }
-    };
-  }, [navigate, roomId]);
 
-  // Track the last message count to detect new messages
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      Object.values(typingTimeoutsRef.current).forEach(id => clearTimeout(id));
+      typingTimeoutsRef.current = {};
+    };
+  }, [roomId, currentUserId, fetchSmartReplies, navigate]);
+
+  // autoscroll
   const messageCountRef = useRef(0);
   const isInitialLoad = useRef(true);
-
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    // Only scroll if:
-    // 1. It's the initial load, or
-    // 2. New messages were added (count increased)
     if (isInitialLoad.current || messages.length > messageCountRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    
-    // Update the message count ref
     messageCountRef.current = messages.length;
     isInitialLoad.current = false;
-  }, [messages.length]); // Only depend on messages.length to prevent unnecessary re-renders
+  }, [messages.length]);
 
-  // Handle click outside reaction picker
+  // click outside reaction picker
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (visibleReactionPickerId && !event.target.closest('.reaction-picker')) {
         setVisibleReactionPickerId(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [visibleReactionPickerId]);
 
   const handleInputChange = (e) => {
-    const message = e.target.value;
+    const message = DOMPurify.sanitize(e.target.value);
     setNewMessage(message);
-    
-    // Only proceed if we have a valid socket and roomId
+
     if (!socket || !roomId) return;
-    
-    // Clear any existing smart replies when user starts typing
+
     setSmartReplies([]);
-    
-    // Emit typing event when user starts typing
+
     if (!isTypingRef.current && message.trim() !== '') {
       isTypingRef.current = true;
-      socket.emit('typing', roomId);
-      
-      // Fetch smart replies when user starts typing a new message
+      socket.emit('typing', { roomId, userId: currentUserId });
       if (message.trim().length > 3) {
         fetchSmartReplies(message);
-      } else {
-        setSmartReplies([]);
       }
     } else if (message.trim() === '') {
-      // If message is empty, stop typing and clear smart replies
       isTypingRef.current = false;
-      socket.emit('stop typing', roomId);
+      socket.emit('stop typing', { roomId, userId: currentUserId });
       setSmartReplies([]);
     } else if (message.trim().length > 3) {
-      // Continue fetching smart replies as user types
       fetchSmartReplies(message);
     }
-    
-    // Clear any existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    // Set a timeout to emit stop typing when user pauses
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
     typingTimeoutRef.current = setTimeout(() => {
       if (isTypingRef.current) {
         isTypingRef.current = false;
-        socket.emit('stop typing', roomId);
+        socket.emit('stop typing', { roomId, userId: currentUserId });
       }
-    }, 2000); // 2 seconds delay before stopping typing indicator
+    }, 2000);
   };
-  
-  const analyzeMessageSentiment = useCallback(async (text) => {
-    if (!text?.trim()) return 'neutral';
-    
-    try {
-      const response = await axios.post(`/api/messages/analyze`, { text });
-      return response.data.sentiment || 'neutral';
-    } catch (error) {
-      console.error('Error analyzing sentiment:', error);
-      return 'neutral';
-    }
-  }, []);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     const messageContent = newMessage.trim();
-    
     if (!messageContent) return;
-    
-    // Analyze sentiment before sending
-    try {
-      setIsAnalyzing(true);
-      const sentiment = await analyzeMessageSentiment(messageContent);
-      
-      // Send message with sentiment
-      const message = {
-        content: messageContent,
-        room: roomId,
-        sentiment // Include sentiment with the message
-      };
-      
-      socket.emit('sendMessage', message, (response) => {
-        if (response.error) {
-          setError(response.error);
-        } else {
-          setNewMessage('');
-          // Clear smart replies after sending
-          setSmartReplies([]);
-        }
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setError('Failed to send message');
-    } finally {
-      setIsAnalyzing(false);
-    }
-    
-    if (!messageContent || !socket || !roomId || !currentUserId) {
-      console.log('Cannot send message: Missing required data', {
-        hasContent: !!messageContent,
-        hasSocket: !!socket,
-        hasRoomId: !!roomId,
-        hasUserId: !!currentUserId
-      });
+
+    if (!socket || !roomId || !currentUserId) {
+      console.log('Cannot send message: missing socket/room/user');
       return;
     }
 
-    // Stop typing indicator when message is sent
-    if (isTypingRef.current) {
-      socket.emit('stop typing', roomId);
-      isTypingRef.current = false;
-    }
-    
-    // Clear any existing typing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    // Get the current user's info
-    const currentUser = JSON.parse(localStorage.getItem('user'));
-    const username = currentUser?.username || 'You';
-    const tempId = `temp-${Date.now()}`;
-    const timestamp = new Date();
-    
-    // Create a temporary message for optimistic update
-    const tempMessage = {
-      _id: tempId,
-      tempId,
-      sender: { 
-        _id: currentUserId,
-        username: username
-      },
-      content: messageContent,
-      timestamp,
-      reactions: [],
-      room: roomId,
-      isOptimistic: true
-    };
+    try {
+      setIsAnalyzing(true);
+      const sentiment = await analyzeMessageSentiment(messageContent);
+      // optimistic local message
+      const currentUser = JSON.parse(localStorage.getItem('user')) || {};
+      const username = currentUser.username || 'You';
+      const tempId = `temp-${Date.now()}`;
+      const timestamp = new Date().toISOString();
 
-    // Add the message to the local state first for immediate feedback
-    setMessages(prev => {
-      // Check if message already exists to prevent duplicates
-      const messageExists = prev.some(msg => 
-        msg._id === tempMessage._id || 
-        (msg.tempId && msg.tempId === tempMessage.tempId)
-      );
-      
-      if (messageExists) {
-        console.log('Message already exists, not adding again');
-        return prev;
-      }
-      return [...prev, tempMessage];
-    });
-    
-    // Clear the input field
-    setNewMessage('');
-
-    // Send the message to the server
-    if (socket) {
-      console.log('Emitting sendMessage event with tempId:', tempId);
-      socket.emit('sendMessage', { 
-        roomId, 
+      const tempMessage = {
+        _id: tempId,
+        tempId,
+        sender: { _id: currentUserId, username },
         content: messageContent,
-        tempId
+        timestamp,
+        reactions: [],
+        room: roomId,
+        isOptimistic: true,
+        sentiment
+      };
+
+      setMessages(prev => {
+        const exists = prev.some(m => m._id === tempId || m.tempId === tempId);
+        if (exists) return prev;
+        return [...prev, tempMessage];
       });
+
+      // stop typing
+      if (isTypingRef.current) {
+        socket.emit('stop typing', { roomId, userId: currentUserId });
+        isTypingRef.current = false;
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setNewMessage('');
+      setSmartReplies([]);
+
+      // emit to server
+      socket.emit('sendMessage', {
+        roomId,
+        content: messageContent,
+        tempId,
+        sentiment
+      }, (ack) => {
+        // optional ack handling
+        if (ack?.error) {
+          setError(ack.error);
+        }
+      });
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setError('Failed to send message.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
   const handleToggleReaction = useCallback((messageId, emoji, event) => {
-    event?.stopPropagation(); // Prevent event bubbling which might trigger scroll
-    
+    event?.stopPropagation();
+
     if (!socket || !currentUserId) {
       console.error('Socket not connected or user not authenticated');
       return;
     }
-    
-    console.log('Toggling reaction:', { messageId, emoji, currentUserId });
-    
-    // Optimistically update the UI immediately
-    setMessages(prevMessages => 
+
+    setMessages(prevMessages =>
       prevMessages.map(message => {
-        if (message._id !== messageId) return message;
-        
+        if ((message._id || message.tempId) !== messageId) return message;
+
         const updatedMessage = { ...message };
-        updatedMessage.reactions = Array.isArray(updatedMessage.reactions) 
-          ? JSON.parse(JSON.stringify(updatedMessage.reactions)) // Deep clone
+        updatedMessage.reactions = Array.isArray(updatedMessage.reactions)
+          ? JSON.parse(JSON.stringify(updatedMessage.reactions))
           : [];
-        
-        // Find the reaction for this emoji
+
         const reactionIndex = updatedMessage.reactions.findIndex(r => r.emoji === emoji);
-        const hasReacted = reactionIndex !== -1 && 
-          updatedMessage.reactions[reactionIndex].users.some(u => 
-            (u && (u._id === currentUserId || u._id?._id === currentUserId)) || 
-            u === currentUserId
+        const hasReacted = reactionIndex !== -1 &&
+          updatedMessage.reactions[reactionIndex].users.some(u =>
+            (u && (u._id === currentUserId)) || u === currentUserId
           );
-        
+
         if (hasReacted) {
-          // Remove user's reaction
-          updatedMessage.reactions[reactionIndex].users = updatedMessage.reactions[reactionIndex].users
-            .filter(u => 
-              (u && u._id !== currentUserId && u._id?._id !== currentUserId) && 
-              u !== currentUserId
+          updatedMessage.reactions[reactionIndex].users =
+            updatedMessage.reactions[reactionIndex].users.filter(u =>
+              !((u && u._id === currentUserId) || u === currentUserId)
             );
-          
-          // Remove the reaction if no users left
+
           if (updatedMessage.reactions[reactionIndex].users.length === 0) {
             updatedMessage.reactions.splice(reactionIndex, 1);
           }
         } else if (reactionIndex !== -1) {
-          // Add user to existing reaction
           updatedMessage.reactions[reactionIndex].users.push(currentUserId);
         } else {
-          // Add new reaction
-          updatedMessage.reactions.push({
-            emoji,
-            users: [currentUserId]
-          });
+          updatedMessage.reactions.push({ emoji, users: [currentUserId] });
         }
-        
+
         return updatedMessage;
       })
     );
-    
-    // Emit the reaction change to the server
-    socket.emit('toggleReaction', { 
-      messageId, 
-      emoji, 
-      userId: currentUserId 
-    });
-    
+
+    socket.emit('toggleReaction', { messageId, emoji, userId: currentUserId });
     setVisibleReactionPickerId(null);
-  }, [socket, currentUserId]);
+  }, [currentUserId]);
 
   const formatReactions = useCallback((reactions) => {
     if (!reactions || !Array.isArray(reactions) || reactions.length === 0) return [];
-    
+
     const reactionMap = {};
-    
+
     reactions.forEach(reaction => {
       if (!reaction?.emoji) return;
-      
       const emoji = reaction.emoji;
       const users = Array.isArray(reaction.users) ? reaction.users : [];
-      
+
       if (!reactionMap[emoji]) {
-        // Create a new reaction entry
-        reactionMap[emoji] = {
-          emoji,
-          count: 0,
-          users: []
-        };
+        reactionMap[emoji] = { emoji, count: 0, users: [] };
       }
-      
-      // Add unique users to this reaction
+
       users.forEach(user => {
-        const userId = (user && (user._id?._id || user._id || user))?.toString();
-        if (userId && !reactionMap[emoji].users.some(u => 
-          (u?._id?._id || u?._id || u)?.toString() === userId
-        )) {
+        const userId = (user && (user._id || user))?.toString();
+        if (userId && !reactionMap[emoji].users.some(u => {
+          const candidate = (u && (u._id || u))?.toString();
+          return candidate === userId;
+        })) {
           reactionMap[emoji].users.push(user);
           reactionMap[emoji].count++;
         }
       });
     });
-    
+
     return Object.values(reactionMap);
   }, []);
 
   const renderReactionPicker = (messageId) => (
     <div className="reaction-picker" onClick={(e) => e.stopPropagation()}>
       {availableEmojis.map((emoji) => (
-        <span 
-          key={emoji} 
+        <span
+          key={emoji}
           className="reaction-option"
           onClick={(e) => handleToggleReaction(messageId, emoji, e)}
         >
@@ -712,48 +581,47 @@ const ChatWindow = () => {
       <div className="chat-header">
         <h2>{otherUsername}</h2>
       </div>
+
       <div className="message-list">
         {messages.map((message) => (
           <div
-            key={message._id}
+            key={message._id || message.tempId}
             className={`message ${message.sender?._id === currentUserId ? 'sent' : 'received'}`}
             data-sentiment={message.sentiment || 'neutral'}
-            onClick={() => setVisibleReactionPickerId(
-              prevId => prevId === message._id ? null : message._id
-            )}
+            onClick={() => setVisibleReactionPickerId(prevId => prevId === (message._id || message.tempId) ? null : (message._id || message.tempId))}
           >
             <div className="message-sender">
               <span className="sender-username">
                 {message.sender?._id === currentUserId ? 'You' : message.sender?.username || 'Unknown'}
               </span>
             </div>
+
             <div className="message-content">{message.content}</div>
+
             <div className="message-footer">
               <div className="message-meta">
                 <span className="timestamp" title={new Date(message.timestamp).toLocaleString()}>
                   {formatTimestamp(message.timestamp)}
                 </span>
                 <span className="sentiment-indicator">
-                  <span className="sentiment-emoji">
-                    {getSentimentEmoji(message.sentiment || 'neutral')}
-                  </span>
+                  <span className="sentiment-emoji">{getSentimentEmoji(message.sentiment || 'neutral')}</span>
                   <SentimentTooltip sentiment={message.sentiment || 'neutral'} />
                 </span>
               </div>
+
               <div className="reactions-container">
                 {formatReactions(message.reactions || []).map((reaction, idx) => {
-                  const userHasReacted = reaction.users.some(u => 
-                    (u && (u._id === currentUserId || u._id?._id === currentUserId)) || 
-                    u === currentUserId
+                  const userHasReacted = reaction.users.some(u =>
+                    (u && (u._id === currentUserId)) || u === currentUserId
                   );
-                  
+
                   return (
                     <button
                       key={`${reaction.emoji}-${idx}`}
                       className={`reaction-pill ${userHasReacted ? 'reacted' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleToggleReaction(message._id, reaction.emoji, e);
+                        handleToggleReaction(message._id || message.tempId, reaction.emoji, e);
                       }}
                       title={`${reaction.count} ${reaction.count === 1 ? 'reaction' : 'reactions'}`}
                     >
@@ -762,12 +630,14 @@ const ChatWindow = () => {
                   );
                 })}
               </div>
-              {visibleReactionPickerId === message._id && renderReactionPicker(message._id)}
+
+              {visibleReactionPickerId === (message._id || message.tempId) && renderReactionPicker(message._id || message.tempId)}
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
+
       {Object.keys(typingUsers).length > 0 && (
         <div className="typing-indicator">
           <span>
@@ -780,13 +650,10 @@ const ChatWindow = () => {
             {Object.keys(typingUsers).length === 1 ? ' is ' : ' are '}
             typing
           </span>
-          <span className="typing-dots">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
+          <span className="typing-dots"><span>.</span><span>.</span><span>.</span></span>
         </div>
       )}
+
       <div className="chat-input-container">
         <form onSubmit={handleSendMessage} className="message-input-form">
           <input
@@ -797,20 +664,17 @@ const ChatWindow = () => {
             className="message-input"
             disabled={isAnalyzing}
           />
-          <button 
-            type="submit" 
-            className="send-button"
-            disabled={isAnalyzing || !newMessage.trim()}
-          >
+          <button type="submit" className="send-button" disabled={isAnalyzing || !newMessage.trim()}>
             {isAnalyzing ? 'Sending...' : 'Send'}
           </button>
         </form>
-        <SmartReplies 
-          replies={smartReplies} 
+
+        <SmartReplies
+          replies={smartReplies}
           onSelect={(reply) => {
             setNewMessage(reply);
             setSmartReplies([]);
-          }} 
+          }}
           isLoading={isAnalyzing}
         />
       </div>

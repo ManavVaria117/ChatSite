@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, NavLink } from 'react-router-dom';
 import axios from 'axios';
-import { FaBars, FaTimes } from 'react-icons/fa';
+import { FaBars, FaTimes, FaSun, FaMoon } from 'react-icons/fa';
+import { useTheme } from '../utils/ThemeContext';
 import './Navbar.css';
 
 const Navbar = () => {
@@ -11,6 +12,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navRef = useRef(null);
   const isAuthenticated = !!localStorage.getItem('token');
+  const { theme, toggleTheme } = useTheme();
   
   // Close menu when clicking outside or route changes
   useEffect(() => {
@@ -132,6 +134,18 @@ const Navbar = () => {
             >
               My Details
             </NavLink>
+          </li>
+          <li>
+            <button
+              onClick={() => {
+                toggleTheme();
+                handleNavClick();
+              }}
+              className="nav-link theme-toggle"
+              aria-label="Toggle theme"
+            >
+              {theme === 'light' ? <FaMoon /> : <FaSun />}
+            </button>
           </li>
           <li>
             <button

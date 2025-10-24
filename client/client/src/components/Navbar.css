@@ -222,6 +222,20 @@
   color: white;
 }
 
+.theme-toggle {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  padding: 0.5rem;
+  font-size: 1.2rem;
+  transition: var(--transition);
+}
+
+.theme-toggle:hover {
+  color: var(--secondary-color);
+}
+
 .logout-button {
   background: #e74c3c;
   border: none;

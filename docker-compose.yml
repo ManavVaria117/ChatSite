@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: chat-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - chat-network
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: chat-backend
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://admin:password@mongodb:27017/chatdb?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key-here
+      PORT: 5000
+      AI_SERVICE_URL: http://ai-service:5001
+      CLIENT_URL: http://localhost:5173
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongodb
+    networks:
+      - chat-network
+
+  # AI Service
+  ai-service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: chat-ai-service
+    restart: unless-stopped
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: production
+    ports:
+      - "5001:5001"
+    networks:
+      - chat-network
+
+  # Frontend (for development)
+  frontend:
+    build:
+      context: ./client/client
+      dockerfile: Dockerfile
+    container_name: chat-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:5000
+      VITE_AI_SERVICE_URL: http://localhost:5001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+      - ai-service
+    networks:
+      - chat-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  chat-network:
+    driver: bridge
